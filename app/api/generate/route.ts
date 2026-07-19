@@ -67,15 +67,19 @@ export async function POST(request: Request) {
   }
 
   let quota;
-  try {
-    quota = await reserveDailyGeneration(user.id);
-  } catch (error) {
-    console.error("Supabase generation quota check failed", error);
-    const message =
-      error instanceof QuotaConfigurationError
-        ? "Sign-in and daily quota protection are not configured yet."
-        : "Daily quota protection is temporarily unavailable. Please try again shortly.";
-    return noStoreJson({ error: message }, { status: 503 });
+  if (user.hasUnlimitedTestGenerations) {
+    quota = { allowed: true, used: 0, remaining: 0, unlimited: true };
+  } else {
+    try {
+      quota = await reserveDailyGeneration(user.id);
+    } catch (error) {
+      console.error("Supabase generation quota check failed", error);
+      const message =
+        error instanceof QuotaConfigurationError
+          ? "Sign-in and daily quota protection are not configured yet."
+          : "Daily quota protection is temporarily unavailable. Please try again shortly.";
+      return noStoreJson({ error: message }, { status: 503 });
+    }
   }
 
   if (!quota.allowed) {

@@ -8,6 +8,7 @@ export type GenerationQuota = {
   allowed: boolean;
   used: number;
   remaining: number;
+  unlimited?: boolean;
 };
 
 export class QuotaConfigurationError extends Error {}
