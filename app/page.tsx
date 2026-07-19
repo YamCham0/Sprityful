@@ -12,8 +12,7 @@ const samples = [
 const styleOptions = ["16-bit adventure", "Cozy fantasy", "Neon arcade", "Pocket horror"];
 const actionOptions = ["Idle + run", "Walk cycle", "Attack combo", "Spell cast"];
 const frameOptions = [4, 6, 8];
-const showcaseSpriteUrl =
-  "https://raw.githubusercontent.com/YamCham0/Sprityful/main/public/showcase/nova-runner-spritesheet.png";
+const showcaseSpriteUrl = "/showcase/nova-runner-spritesheet.png";
 
 type Generation = {
   image: string;
