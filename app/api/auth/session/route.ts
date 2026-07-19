@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   const user = token ? await getAuthenticatedUser(token) : null;
   if (!user || user.isAnonymous) return unauthorized();
 
-  return noStoreJson({ user: { id: user.id, email: user.email } });
+  return noStoreJson({ user: { id: user.id, email: user.email, hasUnlimitedTestGenerations: user.hasUnlimitedTestGenerations } });
 }
 
 export async function POST(request: Request) {
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
   const user = await getAuthenticatedUser(accessToken);
   if (!user || user.isAnonymous) return unauthorized();
 
-  const response = noStoreJson({ user: { id: user.id, email: user.email } });
+  const response = noStoreJson({ user: { id: user.id, email: user.email, hasUnlimitedTestGenerations: user.hasUnlimitedTestGenerations } });
   response.cookies.set({
     name: authCookieName,
     value: accessToken,

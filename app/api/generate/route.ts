@@ -96,10 +96,10 @@ export async function POST(request: Request) {
     "Create a production-ready 2D game sprite sheet.",
     `Character brief: ${prompt}`,
     `Art direction: ${style} pixel art, crisp nearest-neighbor pixels, tightly controlled palette, readable silhouette.`,
-    `Animation request: ${action}. Show exactly ${frames} clearly separated sequential animation poses in a horizontal row.`,
+    `Animation request: ${action}. Show exactly ${frames} clearly separated sequential character poses in a horizontal row.`,
     "Keep the exact same character, outfit, proportions, and palette across every pose.",
     "Use a perfectly flat, solid #00ff00 chroma-key background with no gradients, shadows, floor, scenery, or texture.",
-    "Do not use bright green anywhere on the character or props. Center each full-body pose within an evenly spaced cell, with generous padding.",
+    "Do not use bright green anywhere on the character or props. Center each pose within an evenly spaced cell, with generous padding.",
     "No title, labels, letters, numbers, UI, watermark, borders, cast shadows, or additional characters.",
   ].join(" ");
 
@@ -128,9 +128,11 @@ export async function POST(request: Request) {
     };
 
     if (!response.ok || !payload.success || !payload.result?.image) {
-      const fallback =
-        response.status === 429
-          ? "Today's free generation capacity is busy. Please try again tomorrow."
+      const blockedBySafetyFilter = payload.errors?.some((error) => /nsfw/i.test(error.message ?? ""));
+      const fallback = response.status === 429
+        ? "Today's free generation capacity is busy. Please try again tomorrow."
+        : blockedBySafetyFilter
+          ? "The image service blocked this prompt. Try a more neutral character description."
           : "Generation did not complete. Please try a simpler character description.";
       console.error("Cloudflare image generation failed", {
         status: response.status,

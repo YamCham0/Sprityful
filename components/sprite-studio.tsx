@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { clearStoredSpriteRuns, readStoredSpriteRuns, type StoredSpriteRun, writeStoredSpriteRuns } from "../lib/run-history";
 import { SiteFooter } from "./site-footer";
 
 const samples = [
@@ -32,18 +33,17 @@ type SpriteDetails = {
 type Generation = SpriteDetails & {
   image: string;
   createdAt: string;
-  quota: GenerationQuota;
+  quota?: GenerationQuota;
 };
 
-type RunLog = SpriteDetails & {
-  id: string;
-  name: string;
-  createdAt: string;
+type GenerationResponse = Generation & {
+  quota: GenerationQuota;
 };
 
 type SignedInUser = {
   id: string;
   email: string | null;
+  hasUnlimitedTestGenerations?: boolean;
 };
 
 type SupabaseAuthResponse = {
@@ -55,25 +55,11 @@ type SupabaseAuthResponse = {
   msg?: string;
 };
 
-const runHistoryKey = "sprityful:studio-run-history:v1";
-
 function createRunName(prompt: string) {
   const normalizedPrompt = prompt.trim().replace(/\s+/g, " ");
   if (!normalizedPrompt) return "Untitled character";
   const words = normalizedPrompt.split(" ").slice(0, 6);
   return `${words.join(" ")}${normalizedPrompt.split(" ").length > words.length ? "..." : ""}`;
-}
-
-function isRunLog(value: unknown): value is RunLog {
-  if (!value || typeof value !== "object") return false;
-  const run = value as Partial<RunLog>;
-  return typeof run.id === "string"
-    && typeof run.name === "string"
-    && typeof run.prompt === "string"
-    && typeof run.style === "string"
-    && typeof run.action === "string"
-    && typeof run.frames === "number"
-    && typeof run.createdAt === "string";
 }
 
 function createMetadata({ prompt, style, action, frames }: SpriteDetails) {
@@ -143,7 +129,7 @@ export function SpriteStudio() {
   const [authMessage, setAuthMessage] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
   const [quota, setQuota] = useState<GenerationQuota | null>(null);
-  const [runLog, setRunLog] = useState<RunLog[]>([]);
+  const [runLog, setRunLog] = useState<StoredSpriteRun[]>([]);
   const [runLogReady, setRunLogReady] = useState(false);
 
   const exportMetadata = useMemo(
@@ -187,32 +173,40 @@ export function SpriteStudio() {
   }, []);
 
   useEffect(() => {
+    let active = true;
     const loadRunHistory = window.setTimeout(() => {
-      try {
-        const savedRuns = window.localStorage.getItem(runHistoryKey);
-        if (savedRuns) {
-          const parsedRuns: unknown = JSON.parse(savedRuns);
-          if (Array.isArray(parsedRuns)) setRunLog(parsedRuns.filter(isRunLog).slice(0, 5));
-        }
-      } catch {
-        // Local run history is optional and should never block the studio.
-      } finally {
+      setRunLogReady(false);
+
+      if (!user) {
+        setRunLog([]);
         setRunLogReady(true);
+        return;
       }
+
+      void readStoredSpriteRuns(user.id)
+        .then((runs) => {
+          if (active) setRunLog(runs);
+        })
+        .catch(() => {
+          if (active) setRunLog([]);
+        })
+        .finally(() => {
+          if (active) setRunLogReady(true);
+        });
     }, 0);
 
-    return () => window.clearTimeout(loadRunHistory);
-  }, []);
+    return () => {
+      active = false;
+      window.clearTimeout(loadRunHistory);
+    };
+  }, [user]);
 
   useEffect(() => {
-    if (!runLogReady) return;
-    try {
-      if (runLog.length) window.localStorage.setItem(runHistoryKey, JSON.stringify(runLog));
-      else window.localStorage.removeItem(runHistoryKey);
-    } catch {
-      // A full or unavailable browser storage should not affect generation.
-    }
-  }, [runLog, runLogReady]);
+    if (!runLogReady || !user) return;
+    void writeStoredSpriteRuns(user.id, runLog).catch(() => {
+      // Browser storage is optional and should never block a generation or export.
+    });
+  }, [runLog, runLogReady, user]);
 
   async function authenticate(kind: "signIn" | "signUp") {
     setAuthMessage("");
@@ -318,7 +312,7 @@ export function SpriteStudio() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt, style, action, frames }),
       });
-      const data = (await response.json()) as Generation & { error?: string };
+      const data = (await response.json()) as GenerationResponse & { error?: string };
       if (!response.ok || !data.image) throw new Error(data.error || "Generation did not complete.");
       setGeneration({ ...spriteDetails, image: data.image, createdAt: data.createdAt, quota: data.quota });
       setRunLog((currentRuns) => [
@@ -326,6 +320,7 @@ export function SpriteStudio() {
           ...spriteDetails,
           id: `${data.createdAt}-${Math.random().toString(36).slice(2, 8)}`,
           name: createRunName(spriteDetails.prompt),
+          image: data.image,
           createdAt: data.createdAt,
         },
         ...currentRuns.filter((run) => run.prompt !== spriteDetails.prompt || run.action !== spriteDetails.action || run.style !== spriteDetails.style || run.frames !== spriteDetails.frames),
@@ -382,18 +377,19 @@ export function SpriteStudio() {
     URL.revokeObjectURL(link.href);
   }
 
-  function loadRun(run: RunLog) {
+  function loadRun(run: StoredSpriteRun) {
     setPrompt(run.prompt);
     setStyle(run.style);
     setAction(run.action);
     setFrames(run.frames);
-    setGeneration(null);
+    setGeneration(run);
     setError("");
-    window.setTimeout(() => jumpTo("generator"), 0);
+    window.setTimeout(() => jumpTo("run-review"), 0);
   }
 
   function clearRunHistory() {
     setRunLog([]);
+    if (user) void clearStoredSpriteRuns(user.id).catch(() => undefined);
   }
 
   return (
@@ -416,7 +412,7 @@ export function SpriteStudio() {
         </div>
 
         <section className="studio-access studio-auth-card" id="sign-in" aria-labelledby="access-title">
-          {user ? <div className="auth-state"><b id="access-title">Signed in{user.email ? ` as ${user.email}` : ""}</b><span>{quota?.unlimited ? "Unlimited testing generations are enabled for this account." : quota ? `${quota.remaining} of ${quota.limit} generations remain today.` : "Three generations are available each UTC day."}</span><button className="button button-auth-secondary auth-signout" type="button" onClick={signOut}>Sign out</button></div> : <div className="auth-panel"><b id="access-title">Sign in to create</b><p>Use email and password, or continue with Google. Your free daily generations unlock as soon as you are signed in.</p><form onSubmit={signInWithPassword}><label htmlFor="email">Email address</label><input id="email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" required /><label htmlFor="password">Password</label><input id="password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} placeholder="At least 8 characters" required /><div className="auth-actions"><button className="button button-auth" type="submit" disabled={authBusy || !authReady}>{authBusy ? "Please wait..." : "Sign in"}</button><button className="button button-auth-secondary" type="button" onClick={() => void authenticate("signUp")} disabled={authBusy || !authReady}>Create account</button></div></form><div className="auth-divider"><span />or<span /></div><button className="button button-google" type="button" onClick={signInWithGoogle} disabled={!authReady}><GoogleIcon /> Continue with Google</button></div>}
+          {user ? <div className="auth-state"><b id="access-title">Signed in{user.email ? ` as ${user.email}` : ""}</b><span>{user.hasUnlimitedTestGenerations || quota?.unlimited ? "Unlimited testing generations are enabled for this account." : quota ? `${quota.remaining} of ${quota.limit} generations remain today.` : "Three generations are available each UTC day."}</span><button className="button button-auth-secondary auth-signout" type="button" onClick={signOut}>Sign out</button></div> : <div className="auth-panel"><b id="access-title">Sign in to create</b><p>Use email and password, or continue with Google. Your free daily generations unlock as soon as you are signed in.</p><form onSubmit={signInWithPassword}><label htmlFor="email">Email address</label><input id="email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" required /><label htmlFor="password">Password</label><input id="password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} placeholder="At least 8 characters" required /><div className="auth-actions"><button className="button button-auth" type="submit" disabled={authBusy || !authReady}>{authBusy ? "Please wait..." : "Sign in"}</button><button className="button button-auth-secondary" type="button" onClick={() => void authenticate("signUp")} disabled={authBusy || !authReady}>Create account</button></div></form><div className="auth-divider"><span />or<span /></div><button className="button button-google" type="button" onClick={signInWithGoogle} disabled={!authReady}><GoogleIcon /> Continue with Google</button></div>}
           {authMessage && <p className="auth-message" role="status">{authMessage}</p>}
         </section>
       </section>
@@ -427,7 +423,7 @@ export function SpriteStudio() {
             <div className="eyebrow"><span /> A focused run</div>
             <h2 id="generator-title">Three steps. <em>One exportable sheet.</em></h2>
           </div>
-          <p>Keep the creative choices small and deliberate. The final image stays in this browser until you download it.</p>
+          <p>Keep the creative choices small and deliberate. Recent sheets stay only on this browser, ready to review or export again.</p>
         </div>
 
         <ol className="workflow-steps" aria-label="Sprite generation workflow">
@@ -479,9 +475,9 @@ export function SpriteStudio() {
             </div>
           ) : <div className="empty-result"><div className="empty-stars">✦ ✧ · ✦</div><h3>Your next character appears here.</h3><p>Finish the brief above and the studio will return an original, exportable sprite sheet.</p></div>}
 
-          <aside className="run-log" aria-label="Recent runs on this device">
-            <div className="run-log-heading"><div><b>Recent briefs</b><span>Only on this device</span></div>{runLog.length > 0 && <button type="button" onClick={clearRunHistory}>Clear</button>}</div>
-            {runLog.length > 0 ? <div className="run-log-list">{runLog.map((run) => <button className="run-log-item" type="button" onClick={() => loadRun(run)} key={run.id}><span>{run.name}</span><small>{run.frames} frames · {run.action}</small></button>)}</div> : <p>When you generate a sheet, its brief and settings will be kept here so you can make another variation. Images are not saved.</p>}
+          <aside className="run-log" aria-label="Recent sheets on this browser">
+            <div className="run-log-heading"><div><b>Recent sheets</b><span>Only on this browser</span></div>{runLog.length > 0 && <button type="button" onClick={clearRunHistory}>Clear</button>}</div>
+            {runLog.length > 0 ? <div className="run-log-list">{runLog.map((run) => <button className="run-log-item" type="button" onClick={() => loadRun(run)} key={run.id}><span>{run.name}</span><small>{run.frames} frames · {run.action}</small></button>)}</div> : <p>When you generate a sheet, its image, brief, and settings stay here on this browser for later review and export.</p>}
           </aside>
         </div>
       </section>
