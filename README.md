@@ -1,4 +1,4 @@
-# FrameFoundry
+# Sprityful
 
 Sprityful is an original prompt-to-sprite-sheet web app. It uses Cloudflare Workers AI server-side to generate an image sheet, then converts the chroma-keyed source to a transparent PNG in the browser when the user exports it. It also creates starter JSON metadata for a game pipeline.
 

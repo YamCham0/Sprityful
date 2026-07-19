@@ -106,7 +106,7 @@ export default function Home() {
 
   const metadata = useMemo(
     () => ({
-      name: "framefoundry-sprite-sheet",
+      name: "sprityful-sprite-sheet",
       prompt,
       style,
       animation: action,
@@ -304,7 +304,7 @@ export default function Home() {
     const blob = new Blob([JSON.stringify(metadata, null, 2)], { type: "application/json" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = "framefoundry-spritesheet.json";
+    link.download = "sprityful-spritesheet.json";
     link.click();
     URL.revokeObjectURL(link.href);
   }
@@ -315,9 +315,9 @@ export default function Home() {
       <div className="ambient ambient-two" />
 
       <nav className="nav shell" aria-label="Main navigation">
-        <a className="brand" href="#top" aria-label="FrameFoundry home">
+        <a className="brand" href="#top" aria-label="Sprityful home">
           <span className="brand-mark"><SparkleIcon /></span>
-          FrameFoundry
+          Sprityful
         </a>
         <div className="nav-links">
           <a href="#process">How it works</a>
@@ -338,7 +338,7 @@ export default function Home() {
           <div className="eyebrow"><span /> Prompt to playable assets</div>
           <h1>Give your game a<br /><em>real cast.</em></h1>
           <p>
-            FrameFoundry turns a character idea into original pixel-art animation sheets you can actually use. Describe the hero, choose a motion, and take the PNG with you.
+            Sprityful turns a character idea into original pixel-art animation sheets you can actually use. Describe the hero, choose a motion, and take the PNG with you.
           </p>
           <div className="hero-actions">
             <button className="button button-primary" onClick={jumpToStudio}>
@@ -414,7 +414,7 @@ export default function Home() {
           {generation ? <div className="result-card"><div className="result-top"><div><span className="status-dot" /> Chroma key ready for export</div><span>{new Date(generation.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span></div><div className="result-image checker"><img src={generation.image} alt={`Generated ${action} sprite sheet for ${prompt}`} /></div><div className="result-bottom"><div><b>{frames} frames</b><span>{style} · {action}</span></div><div className="download-actions"><button type="button" onClick={downloadMetadata}>JSON</button><button type="button" onClick={downloadImage}><DownloadIcon /> PNG</button></div></div></div> : <div className="empty-result"><div className="empty-stars">✦ ✧ · ✦</div><h3>Your next character appears here.</h3><p>Fill in a brief above and the studio will return an original, exportable sprite sheet.</p></div>}
       </section>
 
-      <footer className="footer shell"><a className="brand" href="#top"><span className="brand-mark"><SparkleIcon /></span>FrameFoundry</a><p>Tools for the people who still care about the little pixels.</p><a className="text-link" href="#top">Back to top <ArrowIcon /></a></footer>
+      <footer className="footer shell"><a className="brand" href="#top"><span className="brand-mark"><SparkleIcon /></span>Sprityful</a><p>Tools for the people who still care about the little pixels.</p><a className="text-link" href="#top">Back to top <ArrowIcon /></a></footer>
     </main>
   );
 }
