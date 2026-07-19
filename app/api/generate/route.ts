@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
+const model = "@cf/black-forest-labs/flux-1-schnell";
+
 const allowedStyles = ["16-bit adventure", "Cozy fantasy", "Neon arcade", "Pocket horror"];
 const allowedActions = ["Idle + run", "Walk cycle", "Attack combo", "Spell cast"];
 const allowedFrames = [4, 6, 8];
@@ -21,11 +23,12 @@ function cleanPrompt(value: unknown) {
 }
 
 export async function POST(request: Request) {
-  const key = process.env.OPENAI_API_KEY;
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+  const token = process.env.CLOUDFLARE_API_TOKEN;
 
-  if (!key) {
+  if (!accountId || !token) {
     return NextResponse.json(
-      { error: "Generation is not configured yet. Add OPENAI_API_KEY to your Vercel environment variables." },
+      { error: "Generation is not configured yet. Add your Cloudflare Account ID and Workers AI API token to Vercel." },
       { status: 503 },
     );
   }
@@ -52,53 +55,53 @@ export async function POST(request: Request) {
     `Art direction: ${style} pixel art, crisp nearest-neighbor pixels, tightly controlled palette, readable silhouette.`,
     `Animation request: ${action}. Show exactly ${frames} clearly separated sequential animation poses in a horizontal row.`,
     "Keep the exact same character, outfit, proportions, and palette across every pose.",
-    "Use a perfectly flat transparent background. Center each full-body pose within an evenly spaced cell, with generous padding.",
-    "No title, labels, letters, numbers, UI, watermark, borders, floor, scenery, cast shadows, or additional characters.",
+    "Use a perfectly flat, solid #00ff00 chroma-key background with no gradients, shadows, floor, scenery, or texture.",
+    "Do not use bright green anywhere on the character or props. Center each full-body pose within an evenly spaced cell, with generous padding.",
+    "No title, labels, letters, numbers, UI, watermark, borders, cast shadows, or additional characters.",
   ].join(" ");
 
   try {
-    const response = await fetch("https://api.openai.com/v1/images/generations", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
+    const response = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/run/${model}`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          prompt: imagePrompt,
+          steps: 4,
+          seed: Math.floor(Math.random() * 2_147_483_647),
+        }),
       },
-      body: JSON.stringify({
-        model: "gpt-image-1.5",
-        prompt: imagePrompt,
-        size: "1536x1024",
-        quality: "medium",
-        background: "transparent",
-        output_format: "png",
-        moderation: "auto",
-      }),
-    });
+    );
 
     const payload = (await response.json()) as {
-      data?: Array<{ b64_json?: string }>;
-      error?: { code?: string; message?: string };
+      success?: boolean;
+      result?: { image?: string };
+      errors?: Array<{ code?: number; message?: string }>;
     };
 
-    if (!response.ok || !payload.data?.[0]?.b64_json) {
+    if (!response.ok || !payload.success || !payload.result?.image) {
       const fallback =
-        payload.error?.code === "moderation_blocked"
-          ? "That prompt could not be generated. Try a different character description."
-          : "Generation did not complete. Please try again in a moment.";
-      console.error("Image generation failed", {
+        response.status === 429
+          ? "Today's free generation capacity is busy. Please try again tomorrow."
+          : "Generation did not complete. Please try a simpler character description.";
+      console.error("Cloudflare image generation failed", {
         status: response.status,
-        code: payload.error?.code,
-        message: payload.error?.message,
-        requestId: response.headers.get("x-request-id"),
+        errors: payload.errors,
+        requestId: response.headers.get("cf-ray"),
       });
       return NextResponse.json({ error: fallback }, { status: response.status || 502 });
     }
 
     return NextResponse.json({
-      image: `data:image/png;base64,${payload.data[0].b64_json}`,
+      image: `data:image/jpeg;base64,${payload.result.image}`,
       createdAt: new Date().toISOString(),
     });
   } catch (error) {
-    console.error("Image generation request failed", error);
+    console.error("Cloudflare image generation request failed", error);
     return NextResponse.json({ error: "We could not reach the image service. Please try again." }, { status: 502 });
   }
 }

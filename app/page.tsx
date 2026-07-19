@@ -73,6 +73,9 @@ export default function Home() {
       layout: { columns: frames, rows: 1, cellWidth: 256, cellHeight: 256 },
       fps: action === "Idle + run" ? 8 : 10,
       transparentBackground: true,
+      sourceFormat: "jpeg",
+      exportFormat: "png",
+      backgroundRemoval: "Client-side chroma key (#00ff00)",
     }),
     [action, frames, prompt, style],
   );
@@ -105,10 +108,37 @@ export default function Home() {
 
   function downloadImage() {
     if (!generation) return;
-    const link = document.createElement("a");
-    link.href = generation.image;
-    link.download = "framefoundry-spritesheet.png";
-    link.click();
+    const source = new window.Image();
+    source.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = source.naturalWidth;
+      canvas.height = source.naturalHeight;
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      if (!context) return;
+
+      context.drawImage(source, 0, 0);
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
+      for (let index = 0; index < pixels.data.length; index += 4) {
+        const red = pixels.data[index];
+        const green = pixels.data[index + 1];
+        const blue = pixels.data[index + 2];
+        const greenDominant = green > 105 && green > red * 1.28 && green > blue * 1.28;
+        if (greenDominant) {
+          const matte = Math.min(1, Math.max(0, (green - Math.max(red, blue) * 1.28) / 90));
+          pixels.data[index + 3] = Math.round(255 * (1 - matte));
+        }
+      }
+      context.putImageData(pixels, 0, 0);
+      canvas.toBlob((blob) => {
+        if (!blob) return;
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "sprityful-spritesheet.png";
+        link.click();
+        URL.revokeObjectURL(link.href);
+      }, "image/png");
+    };
+    source.src = generation.image;
   }
 
   function downloadMetadata() {
@@ -180,7 +210,7 @@ export default function Home() {
       <section className="strip shell" aria-label="Product benefits">
         <div><span className="strip-icon"><GridIcon /></span><p><b>Asset-first</b> Designed around exported files, not pretty previews.</p></div>
         <div><span className="strip-icon"><SparkleIcon /></span><p><b>Original results</b> Every brief starts from your own character idea.</p></div>
-        <div><span className="strip-icon"><DownloadIcon /></span><p><b>Engine friendly</b> PNG plus starter sheet metadata in one click.</p></div>
+        <div><span className="strip-icon"><DownloadIcon /></span><p><b>Engine friendly</b> Chroma-key PNG plus starter sheet metadata in one click.</p></div>
       </section>
 
       <section className="process shell" id="process">
@@ -188,17 +218,17 @@ export default function Home() {
         <div className="steps">
           <article className="step-card"><span className="step-number">01</span><div className="step-icon">✎</div><h3>Describe the character</h3><p>Give us the silhouette, their strange little prop, and the mood of your game.</p><div className="mini-prompt">“A turnip knight with a dented helmet…”</div></article>
           <article className="step-card"><span className="step-number">02</span><div className="step-icon">✦</div><h3>Choose a movement</h3><p>Pick the motion your scene needs first. Every output is composed as a usable sequence.</p><div className="mini-timeline"><i /><i /><i /><i /></div></article>
-          <article className="step-card"><span className="step-number">03</span><div className="step-icon">↓</div><h3>Drop it into your build</h3><p>Download the transparent PNG and a matching JSON starter file for your pipeline.</p><div className="mini-file"><b>sprite-sheet</b><span>.png</span></div></article>
+          <article className="step-card"><span className="step-number">03</span><div className="step-icon">↓</div><h3>Drop it into your build</h3><p>Export a chroma-keyed PNG and matching JSON starter file for your pipeline.</p><div className="mini-file"><b>sprite-sheet</b><span>.png</span></div></article>
         </div>
       </section>
 
       <section className="showcase shell" id="showcase">
         <div className="showcase-copy"><div className="eyebrow"><span /> Built for lively worlds</div><h2>It begins with a<br /><em>single character.</em></h2><p>Then you give them a walk, a spell, a hurt pose, an absurd victory dance. Start with the one your game has been missing.</p><button className="button button-dark" onClick={jumpToStudio}>Make one now <ArrowIcon /></button></div>
-        <div className="showcase-window"><div className="window-bar"><span /><span /><span /><b>preview / nova-runner.png</b></div><div className="checker"><Image src="/showcase/nova-runner-spritesheet.png" alt="Pixel art character action-sheet showcase" width={1792} height={896} /></div><div className="window-footer"><span>transparent background</span><span>1536 × 1024</span></div></div>
+        <div className="showcase-window"><div className="window-bar"><span /><span /><span /><b>preview / nova-runner.png</b></div><div className="checker"><Image src="/showcase/nova-runner-spritesheet.png" alt="Pixel art character action-sheet showcase" width={1792} height={896} loading="eager" /></div><div className="window-footer"><span>4 character poses</span><span>export-ready sheet</span></div></div>
       </section>
 
       <section className="studio shell" id="studio">
-        <div className="studio-intro"><div className="eyebrow"><span /> The sprite studio</div><h2>Let’s make<br /><em>something playable.</em></h2><p>Use the real generator below. Your image is created on demand, and stays in your browser until you download it.</p><div className="studio-note"><SparkleIcon /> Your prompt is sent securely from the server—your API key never reaches the browser.</div></div>
+        <div className="studio-intro"><div className="eyebrow"><span /> The sprite studio</div><h2>Let’s make<br /><em>something playable.</em></h2><p>Use the real generator below. Your image is created on demand, and stays in your browser until you export it.</p><div className="studio-note"><SparkleIcon /> Your prompt is sent securely from the server—your Cloudflare token never reaches the browser.</div></div>
         <form className="generator" onSubmit={generate}>
           <label className="field-label" htmlFor="character">Character brief</label>
           <textarea id="character" value={prompt} onChange={(event) => setPrompt(event.target.value)} maxLength={480} rows={4} placeholder="A quiet cloud mechanic with moon boots..." />
@@ -215,7 +245,7 @@ export default function Home() {
       </section>
 
       <section className="result shell" aria-live="polite">
-        {generation ? <div className="result-card"><div className="result-top"><div><span className="status-dot" /> Ready to take into your game</div><span>{new Date(generation.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span></div><div className="result-image checker"><img src={generation.image} alt={`Generated ${action} sprite sheet for ${prompt}`} /></div><div className="result-bottom"><div><b>{frames} frames</b><span>{style} · {action}</span></div><div className="download-actions"><button type="button" onClick={downloadMetadata}>JSON</button><button type="button" onClick={downloadImage}><DownloadIcon /> PNG</button></div></div></div> : <div className="empty-result"><div className="empty-stars">✦ ✧ · ✦</div><h3>Your next character appears here.</h3><p>Fill in a brief above and the studio will return an original, downloadable sprite sheet.</p></div>}
+          {generation ? <div className="result-card"><div className="result-top"><div><span className="status-dot" /> Chroma key ready for export</div><span>{new Date(generation.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span></div><div className="result-image checker"><img src={generation.image} alt={`Generated ${action} sprite sheet for ${prompt}`} /></div><div className="result-bottom"><div><b>{frames} frames</b><span>{style} · {action}</span></div><div className="download-actions"><button type="button" onClick={downloadMetadata}>JSON</button><button type="button" onClick={downloadImage}><DownloadIcon /> PNG</button></div></div></div> : <div className="empty-result"><div className="empty-stars">✦ ✧ · ✦</div><h3>Your next character appears here.</h3><p>Fill in a brief above and the studio will return an original, exportable sprite sheet.</p></div>}
       </section>
 
       <footer className="footer shell"><a className="brand" href="#top"><span className="brand-mark"><SparkleIcon /></span>FrameFoundry</a><p>Tools for the people who still care about the little pixels.</p><a className="text-link" href="#top">Back to top <ArrowIcon /></a></footer>
