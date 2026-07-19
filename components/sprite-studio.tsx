@@ -128,7 +128,7 @@ export function SpriteStudio() {
     }
 
     if (new URLSearchParams(window.location.search).get("signed_in") === "1") {
-      setAuthMessage("You are signed in. Your seven daily generations are ready.");
+      setAuthMessage("You are signed in. Your three daily generations are ready.");
       window.history.replaceState({}, "", `${window.location.pathname}#generator`);
     }
 
@@ -188,7 +188,7 @@ export function SpriteStudio() {
 
       setUser(sessionData.user);
       setPassword("");
-      setAuthMessage(kind === "signUp" ? "Account created. Your seven daily generations are ready." : "You are signed in. Your seven daily generations are ready.");
+      setAuthMessage(kind === "signUp" ? "Account created. Your three daily generations are ready." : "You are signed in. Your three daily generations are ready.");
       window.setTimeout(() => jumpTo("generator"), 0);
     } catch (requestError) {
       setAuthMessage(requestError instanceof Error ? requestError.message : "We could not complete your sign-in.");
@@ -311,12 +311,12 @@ export function SpriteStudio() {
         <div className="studio-hero-copy">
           <div className="eyebrow"><span /> Your sprite studio</div>
           <h1 id="studio-title">Build a cast<br /><em>worth playing.</em></h1>
-          <p>Sign in once, then turn your character briefs into game-ready sprite sheets. Every verified account receives seven generations each day.</p>
+          <p>Sign in once, then turn your character briefs into game-ready sprite sheets. Every verified account receives three generations each day.</p>
           <a className="text-link studio-backlink" href="/"><ArrowIcon /> Back to the overview</a>
         </div>
 
         <section className="studio-access" id="sign-in" aria-labelledby="access-title">
-          {user ? <div className="auth-state"><b id="access-title">Signed in{user.email ? ` as ${user.email}` : ""}</b><span>{quota ? `${quota.remaining} of ${quota.limit} generations remain today.` : "Seven generations are available each UTC day."}</span><button className="button button-auth-secondary auth-signout" type="button" onClick={signOut}>Sign out</button></div> : <div className="auth-panel"><b id="access-title">Sign in to create</b><p>Use email and password, or continue with Google. Your free daily generations unlock as soon as you are signed in.</p><form onSubmit={signInWithPassword}><label htmlFor="email">Email address</label><input id="email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" required /><label htmlFor="password">Password</label><input id="password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} placeholder="At least 8 characters" required /><div className="auth-actions"><button className="button button-auth" type="submit" disabled={authBusy || !authReady}>{authBusy ? "Please wait..." : "Sign in"}</button><button className="button button-auth-secondary" type="button" onClick={() => void authenticate("signUp")} disabled={authBusy || !authReady}>Create account</button></div></form><div className="auth-divider"><span />or<span /></div><button className="button button-google" type="button" onClick={signInWithGoogle} disabled={!authReady}><GoogleIcon /> Continue with Google</button></div>}
+          {user ? <div className="auth-state"><b id="access-title">Signed in{user.email ? ` as ${user.email}` : ""}</b><span>{quota ? `${quota.remaining} of ${quota.limit} generations remain today.` : "Three generations are available each UTC day."}</span><button className="button button-auth-secondary auth-signout" type="button" onClick={signOut}>Sign out</button></div> : <div className="auth-panel"><b id="access-title">Sign in to create</b><p>Use email and password, or continue with Google. Your free daily generations unlock as soon as you are signed in.</p><form onSubmit={signInWithPassword}><label htmlFor="email">Email address</label><input id="email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" required /><label htmlFor="password">Password</label><input id="password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} placeholder="At least 8 characters" required /><div className="auth-actions"><button className="button button-auth" type="submit" disabled={authBusy || !authReady}>{authBusy ? "Please wait..." : "Sign in"}</button><button className="button button-auth-secondary" type="button" onClick={() => void authenticate("signUp")} disabled={authBusy || !authReady}>Create account</button></div></form><div className="auth-divider"><span />or<span /></div><button className="button button-google" type="button" onClick={signInWithGoogle} disabled={!authReady}><GoogleIcon /> Continue with Google</button></div>}
           {authMessage && <p className="auth-message" role="status">{authMessage}</p>}
         </section>
       </section>

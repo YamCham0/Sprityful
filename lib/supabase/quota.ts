@@ -1,6 +1,6 @@
 import { getSupabasePublicConfig, getSupabaseSecretKey } from "./config";
 
-export const DAILY_GENERATION_LIMIT = 7;
+export const DAILY_GENERATION_LIMIT = 3;
 
 export type GenerationQuota = {
   allowed: boolean;
