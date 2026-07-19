@@ -1,34 +1,100 @@
 # Sprityful
 
-Sprityful is an original prompt-to-sprite-sheet web app. It uses Cloudflare Workers AI server-side to generate an image sheet, then converts the chroma-keyed source to a transparent PNG in the browser when the user exports it. It also creates starter JSON metadata for a game pipeline.
+<p align="center">
+  <img src="public/blue-fire-sprite.png" alt="Sprityful blue flame" width="84" />
+</p>
 
-## Run it locally
+<p align="center">
+  Turn a character idea into an original, downloadable game sprite sheet.
+</p>
 
-1. Install dependencies: `npm install`
-2. Copy `.env.example` to `.env.local` and add the Cloudflare and Supabase values.
-3. Start the app: `npm run dev`
-4. Open `http://localhost:3000`
+<p align="center">
+  <a href="https://sprityful.vercel.app/"><strong>Open Sprityful</strong></a>
+  &nbsp;&middot;&nbsp;
+  <a href="https://github.com/YamCham0/Sprityful/issues">Report an issue</a>
+</p>
+
+![Sprityful landing page preview](docs/previews/sprityful-home.png)
+
+## Make sprites in a few steps
+
+1. [Open the sprite studio](https://sprityful.vercel.app/studio) and sign in with email/password or Google.
+2. Describe your character, then pick an art style, first animation, and frame count.
+3. Generate an original sprite sheet.
+4. Download a transparent PNG and optional starter JSON metadata for your game.
+
+Every verified account receives **3 generations per UTC day**. This keeps the free generation pool available for everyone.
+
+## What the studio looks like
+
+| Character controls | Generated asset |
+| --- | --- |
+| ![Sprityful studio controls](docs/previews/sprityful-studio.png) | ![Example generated sprite sheet](docs/previews/sprityful-generated-sprites.png) |
+
+## Run Sprityful locally
+
+You need Node.js 20 or newer, a Cloudflare Workers AI account, and a Supabase project.
+
+```bash
+git clone https://github.com/YamCham0/Sprityful.git
+cd Sprityful
+npm install
+cp .env.example .env.local
+npm run dev
+```
+
+On Windows PowerShell, use this instead of `cp`:
+
+```powershell
+Copy-Item .env.example .env.local
+```
+
+Then open [http://localhost:3000](http://localhost:3000). Before generation and sign-in work, fill in `.env.local` as described below.
+
+## Connect your services
+
+### 1. Cloudflare Workers AI
+
+Create a Cloudflare API token with **Workers AI Read** and **Workers AI Edit** permissions, then add these values to `.env.local`:
+
+```env
+CLOUDFLARE_ACCOUNT_ID=your_cloudflare_account_id
+CLOUDFLARE_API_TOKEN=your_workers_ai_api_token
+```
+
+### 2. Supabase authentication and daily quota
+
+1. Run the SQL files in [`supabase/migrations`](supabase/migrations) in filename order.
+2. Add your local callback (`http://localhost:3000/auth/callback`) and production callback (`https://sprityful.vercel.app/auth/callback`) in **Authentication -> URL Configuration**.
+3. Keep email confirmation enabled if you want every email/password account to verify its address.
+4. Enable the Google provider in Supabase if you want Google sign-in. Add the Supabase callback URL to your Google OAuth client, then paste the client ID and secret back into Supabase.
+
+Add these Supabase values to `.env.local`:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your_supabase_publishable_key
+SUPABASE_SECRET_KEY=your_supabase_secret_key
+```
+
+`SUPABASE_SECRET_KEY`, `CLOUDFLARE_API_TOKEN`, and `CLOUDFLARE_ACCOUNT_ID` are server-only. Never give them a `NEXT_PUBLIC_` prefix or commit them to Git.
 
 ## Deploy to Vercel
 
-Import the GitHub repository into Vercel, then add every variable from `.env.example`. `CLOUDFLARE_API_TOKEN` and `SUPABASE_SECRET_KEY` are server-only and never reach the browser.
+1. Import this GitHub repository into Vercel.
+2. Add every value from `.env.example` to **Production**, **Preview**, and **Development**.
+3. Deploy. Future pushes to `main` will automatically create a new production deployment.
 
-Create the token in Cloudflare’s Workers AI dashboard. It needs the `Workers AI Read` and `Workers AI Edit` permissions.
+## How it works
 
-## Supabase auth and quota setup
+- Sprityful uses Cloudflare Workers AI (`@cf/black-forest-labs/flux-1-schnell`) to create the sprite-sheet source.
+- The generator requests a green chroma-key background; Sprityful removes it in the browser when you download the final PNG.
+- Supabase handles email/password and Google sign-in.
+- A transaction-safe Supabase function reserves a generation before image creation, enforcing the three-per-day limit even when requests happen at the same time.
+- Images are returned to the browser for export; Sprityful does not create a public gallery of user generations.
 
-1. Create or choose a Supabase project, then run the SQL migration files in [`supabase/migrations`](supabase/migrations) in order.
-2. In **Authentication → URL Configuration**, set the Site URL to `https://sprityful.vercel.app` and add `https://sprityful.vercel.app/auth/callback` to Redirect URLs. Add a localhost callback there too for local development.
-3. In **Project Connect / API Keys**, copy the Project URL and publishable key to `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Copy the server-only `sb_secret_` key to `SUPABASE_SECRET_KEY` (a legacy `SUPABASE_SERVICE_ROLE_KEY` also works).
-4. Email/password authentication is enabled by default. Keep **Confirm Email** enabled in the Email provider so each account must verify its address before its first sign-in.
-5. To enable Google, create a Google OAuth web client, add `https://sprityful.vercel.app` as an authorized JavaScript origin, add the Supabase callback URL shown in **Authentication → Providers → Google** as an authorized redirect URI, then paste the Google Client ID and Client Secret into that Supabase provider.
-6. Add the same variables to Vercel for Production, Preview, and Development, then redeploy.
+## Helpful notes
 
-The migrations use a transaction-safe upsert to reserve a generation before Workers AI is invoked. They cannot increment beyond three per authenticated, non-anonymous user per UTC date—even with concurrent requests or direct API calls.
-
-## Notes
-
-- The landing-page showcase artwork is an original generated project asset at `public/showcase/nova-runner-spritesheet.png`.
-- The generator uses Cloudflare’s `@cf/black-forest-labs/flux-1-schnell` at four steps to fit inside the free Workers AI allocation for small projects.
-- Flux returns JPEG output, so Sprityful requests a solid green chroma-key backdrop and removes it in the browser only when exporting the final PNG. Avoid asking for green clothing or props.
-- Visitors can browse the site, but only email/password or Google-authenticated Supabase users can reach the generation endpoint. Supabase anonymous sessions are explicitly rejected.
+- Avoid bright green clothing or props: green is used as the export background key.
+- The generated image starts as JPEG because of the model output; use the **PNG** button for a transparent export.
+- Visitors can browse the site, but generation requires a non-anonymous Supabase account.
