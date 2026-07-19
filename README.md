@@ -27,9 +27,13 @@ Every verified account receives **3 generations per UTC day**. This keeps the fr
 
 ## What the studio looks like
 
-| Studio controls | Export-ready sprite sheet |
+| Studio controls | Generated sprite sheet |
 | --- | --- |
-| ![Sprityful studio controls](docs/previews/sprityful-studio.png) | ![Generated sprite sheet with JSON and PNG download controls](docs/previews/sprityful-generated-sprites.png) |
+| ![Sprityful studio controls](docs/previews/sprityful-studio.png) | ![Example generated sprite sheet](docs/previews/sprityful-generated-sprites.png) |
+
+### Export your work
+
+![Generated sprite sheet with JSON and PNG download controls](docs/previews/sprityful-export-buttons.png)
 
 ## Run Sprityful locally
 
