@@ -1,4 +1,5 @@
 export const authCookieName = "sprityful_access_token";
+export const MAX_ACCESS_TOKEN_LENGTH = 8_000;
 
 export type SupabasePublicConfig = {
   url: string;
@@ -12,6 +13,28 @@ export function getSupabasePublicConfig(): SupabasePublicConfig | null {
   if (!url || !publishableKey) return null;
 
   return { url, publishableKey };
+}
+
+export function getAccessTokenFromCookieHeader(cookieHeader: string | null) {
+  if (!cookieHeader) return null;
+
+  const prefix = `${authCookieName}=`;
+  for (const segment of cookieHeader.split(";")) {
+    const value = segment.trim();
+    if (!value.startsWith(prefix)) continue;
+
+    const encodedToken = value.slice(prefix.length);
+    if (!encodedToken || encodedToken.length > MAX_ACCESS_TOKEN_LENGTH) return null;
+
+    try {
+      const token = decodeURIComponent(encodedToken);
+      return token && token.length <= MAX_ACCESS_TOKEN_LENGTH ? token : null;
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
 }
 
 export function getSupabaseSecretKeys() {

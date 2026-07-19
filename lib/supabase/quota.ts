@@ -2,6 +2,8 @@ import { getSupabasePublicConfig, getSupabaseSecretKeys } from "./config";
 
 export const DAILY_GENERATION_LIMIT = 3;
 
+const QUOTA_REQUEST_TIMEOUT_MS = 10_000;
+
 export type GenerationQuota = {
   allowed: boolean;
   used: number;
@@ -41,6 +43,7 @@ export async function reserveDailyGeneration(userId: string): Promise<Generation
       },
       body: JSON.stringify({ p_user_id: userId }),
       cache: "no-store",
+      signal: AbortSignal.timeout(QUOTA_REQUEST_TIMEOUT_MS),
     });
 
     if (response.ok || response.status !== 401) break;

@@ -1,5 +1,7 @@
 import { getSupabasePublicConfig } from "./config";
 
+const AUTH_REQUEST_TIMEOUT_MS = 8_000;
+
 export type AuthenticatedUser = {
   id: string;
   email: string | null;
@@ -17,6 +19,7 @@ export async function getAuthenticatedUser(accessToken: string): Promise<Authent
         Authorization: `Bearer ${accessToken}`,
       },
       cache: "no-store",
+      signal: AbortSignal.timeout(AUTH_REQUEST_TIMEOUT_MS),
     });
 
     if (!response.ok) return null;

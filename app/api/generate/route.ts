@@ -1,13 +1,13 @@
-import { NextResponse } from "next/server";
-
+import { hasJsonContentType, MAX_GENERATION_REQUEST_BYTES, noStoreJson, readJsonBody } from "../../../lib/http";
 import { getAuthenticatedUser } from "../../../lib/supabase/auth";
-import { authCookieName } from "../../../lib/supabase/config";
+import { getAccessTokenFromCookieHeader } from "../../../lib/supabase/config";
 import { DAILY_GENERATION_LIMIT, QuotaConfigurationError, reserveDailyGeneration } from "../../../lib/supabase/quota";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
 const model = "@cf/black-forest-labs/flux-1-schnell";
+const IMAGE_REQUEST_TIMEOUT_MS = 110_000;
 
 const allowedStyles = ["16-bit adventure", "Cozy fantasy", "Neon arcade", "Pocket horror"];
 const allowedActions = ["Idle + run", "Walk cycle", "Attack combo", "Spell cast"];
@@ -27,42 +27,43 @@ function cleanPrompt(value: unknown) {
 }
 
 export async function POST(request: Request) {
-  const cookie = request.headers.get("cookie") || "";
-  const accessToken = cookie
-    .split(";")
-    .map((entry) => entry.trim())
-    .find((entry) => entry.startsWith(`${authCookieName}=`))
-    ?.slice(authCookieName.length + 1);
+  const accessToken = getAccessTokenFromCookieHeader(request.headers.get("cookie"));
   const user = accessToken ? await getAuthenticatedUser(accessToken) : null;
 
   if (!user || user.isAnonymous) {
-    return NextResponse.json({ error: "Sign in with an email address to generate sprites." }, { status: 401 });
+    return noStoreJson({ error: "Sign in with an email address to generate sprites." }, { status: 401 });
   }
 
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
   const token = process.env.CLOUDFLARE_API_TOKEN;
 
   if (!accountId || !token) {
-    return NextResponse.json(
+    return noStoreJson(
       { error: "Generation is not configured yet. Add your Cloudflare Account ID and Workers AI API token to Vercel." },
       { status: 503 },
     );
   }
 
-  let body: GenerationRequest;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "The request body must be valid JSON." }, { status: 400 });
+  if (!hasJsonContentType(request)) {
+    return noStoreJson({ error: "The request body must be valid JSON." }, { status: 400 });
   }
 
+  const parsed = await readJsonBody<GenerationRequest>(request, MAX_GENERATION_REQUEST_BYTES);
+  if (parsed.error === "too_large") {
+    return noStoreJson({ error: "The request is too large. Please try a shorter character description." }, { status: 413 });
+  }
+  if (parsed.error) {
+    return noStoreJson({ error: "The request body must be valid JSON." }, { status: 400 });
+  }
+
+  const body = parsed.body;
   const prompt = cleanPrompt(body.prompt);
   const style = typeof body.style === "string" && allowedStyles.includes(body.style) ? body.style : null;
   const action = typeof body.action === "string" && allowedActions.includes(body.action) ? body.action : null;
   const frames = typeof body.frames === "number" && allowedFrames.includes(body.frames) ? body.frames : null;
 
   if (!prompt || !style || !action || !frames) {
-    return NextResponse.json({ error: "Please provide a valid character prompt and generator settings." }, { status: 400 });
+    return noStoreJson({ error: "Please provide a valid character prompt and generator settings." }, { status: 400 });
   }
 
   let quota;
@@ -74,11 +75,11 @@ export async function POST(request: Request) {
       error instanceof QuotaConfigurationError
         ? "Sign-in and daily quota protection are not configured yet."
         : "Daily quota protection is temporarily unavailable. Please try again shortly.";
-    return NextResponse.json({ error: message }, { status: 503 });
+    return noStoreJson({ error: message }, { status: 503 });
   }
 
   if (!quota.allowed) {
-    return NextResponse.json(
+    return noStoreJson(
       {
         error: `You have reached your ${DAILY_GENERATION_LIMIT} generations for today. Come back tomorrow.`,
         quota: { limit: DAILY_GENERATION_LIMIT, used: quota.used, remaining: quota.remaining },
@@ -112,6 +113,7 @@ export async function POST(request: Request) {
           steps: 4,
           seed: Math.floor(Math.random() * 2_147_483_647),
         }),
+        signal: AbortSignal.timeout(IMAGE_REQUEST_TIMEOUT_MS),
       },
     );
 
@@ -131,16 +133,16 @@ export async function POST(request: Request) {
         errors: payload.errors,
         requestId: response.headers.get("cf-ray"),
       });
-      return NextResponse.json({ error: fallback }, { status: response.status || 502 });
+      return noStoreJson({ error: fallback }, { status: response.status || 502 });
     }
 
-    return NextResponse.json({
+    return noStoreJson({
       image: `data:image/jpeg;base64,${payload.result.image}`,
       createdAt: new Date().toISOString(),
       quota: { limit: DAILY_GENERATION_LIMIT, used: quota.used, remaining: quota.remaining },
     });
   } catch (error) {
     console.error("Cloudflare image generation request failed", error);
-    return NextResponse.json({ error: "We could not reach the image service. Please try again." }, { status: 502 });
+    return noStoreJson({ error: "We could not reach the image service. Please try again." }, { status: 502 });
   }
 }
