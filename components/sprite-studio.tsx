@@ -115,7 +115,7 @@ function GoogleIcon() {
 }
 
 export function SpriteStudio() {
-  const [prompt, setPrompt] = useState(samples[0]);
+  const [prompt, setPrompt] = useState("");
   const [style, setStyle] = useState(styleOptions[0]);
   const [action, setAction] = useState(actionOptions[0]);
   const [frames, setFrames] = useState(4);
@@ -443,8 +443,10 @@ export function SpriteStudio() {
         <form className="generator studio-generator" onSubmit={generate}>
           <section className="form-step" aria-labelledby="brief-step-title">
             <div className="form-step-heading"><span>01</span><div><h3 id="brief-step-title">Character brief</h3><p>Give the generator the silhouette, personality, and standout details that make this run recognizable.</p></div></div>
-            <label className="field-label" htmlFor="character">Who are we bringing to life?</label>
-            <textarea id="character" value={prompt} onChange={(event) => setPrompt(event.target.value)} maxLength={480} rows={4} placeholder="A quiet cloud mechanic with moon boots..." />
+            <div className={`floating-textarea${prompt ? " is-populated" : ""}`}>
+              <textarea id="character" value={prompt} onChange={(event) => setPrompt(event.target.value)} maxLength={480} rows={4} />
+              <label className="floating-label" htmlFor="character">Describe your character</label>
+            </div>
             <div className="sample-row"><span>Try a spark:</span>{samples.map((sample) => <button type="button" className="sample" key={sample} onClick={() => setPrompt(sample)}>{sample.split(" ").slice(0, 4).join(" ")}...</button>)}</div>
           </section>
 
@@ -456,7 +458,7 @@ export function SpriteStudio() {
 
           <section className="form-step form-step-export" aria-labelledby="export-step-title">
             <div className="form-step-heading"><span>03</span><div><h3 id="export-step-title">Generate and review</h3><p>Review the output, then download a PNG with green removed and matching sprite metadata.</p></div></div>
-            <button className="button button-generate" disabled={status === "working" || !user || !authReady} type="submit">{status === "working" ? <><span className="spinner" /> Rendering your sprites...</> : !authReady ? "Checking sign-in..." : !user ? "Sign in above to generate" : <><SparkleIcon /> Generate this run <ArrowIcon /></>}</button>
+            <button className="button button-generate" disabled={status === "working" || !prompt.trim() || !user || !authReady} type="submit">{status === "working" ? <><span className="spinner" /> Rendering your sprites...</> : !authReady ? "Checking sign-in..." : !user ? "Sign in above to generate" : !prompt.trim() ? "Describe a character to generate" : <><SparkleIcon /> Generate this run <ArrowIcon /></>}</button>
             {error && <p className="form-error" role="alert">{error}</p>}
             <p className="fine-print">By generating, you agree not to request content that violates our usage rules.</p>
           </section>
