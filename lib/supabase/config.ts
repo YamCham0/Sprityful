@@ -14,6 +14,8 @@ export function getSupabasePublicConfig(): SupabasePublicConfig | null {
   return { url, publishableKey };
 }
 
-export function getSupabaseSecretKey() {
-  return process.env.SUPABASE_SECRET_KEY?.trim() || process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || null;
+export function getSupabaseSecretKeys() {
+  return [process.env.SUPABASE_SERVICE_ROLE_KEY?.trim(), process.env.SUPABASE_SECRET_KEY?.trim()].filter(
+    (key): key is string => Boolean(key),
+  );
 }

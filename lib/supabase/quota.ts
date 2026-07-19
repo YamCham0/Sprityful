@@ -1,4 +1,4 @@
-import { getSupabasePublicConfig, getSupabaseSecretKey } from "./config";
+import { getSupabasePublicConfig, getSupabaseSecretKeys } from "./config";
 
 export const DAILY_GENERATION_LIMIT = 3;
 
@@ -24,25 +24,30 @@ function isQuota(value: unknown): value is GenerationQuota {
 
 export async function reserveDailyGeneration(userId: string): Promise<GenerationQuota> {
   const config = getSupabasePublicConfig();
-  const secretKey = getSupabaseSecretKey();
+  const secretKeys = getSupabaseSecretKeys();
 
-  if (!config || !secretKey) {
+  if (!config || secretKeys.length === 0) {
     throw new QuotaConfigurationError("Supabase quota settings are missing.");
   }
 
-  const response = await fetch(`${config.url}/rest/v1/rpc/reserve_daily_generation`, {
-    method: "POST",
-    headers: {
-      apikey: secretKey,
-      Authorization: `Bearer ${secretKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ p_user_id: userId }),
-    cache: "no-store",
-  });
+  let response: Response | null = null;
+  for (const secretKey of secretKeys) {
+    response = await fetch(`${config.url}/rest/v1/rpc/reserve_daily_generation`, {
+      method: "POST",
+      headers: {
+        apikey: secretKey,
+        Authorization: `Bearer ${secretKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ p_user_id: userId }),
+      cache: "no-store",
+    });
 
-  if (!response.ok) {
-    throw new Error(`Supabase quota RPC failed with ${response.status}.`);
+    if (response.ok || response.status !== 401) break;
+  }
+
+  if (!response || !response.ok) {
+    throw new Error(`Supabase quota RPC failed with ${response?.status ?? "no response"}.`);
   }
 
   const result = (await response.json()) as unknown;
