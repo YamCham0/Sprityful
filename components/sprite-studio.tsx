@@ -130,7 +130,7 @@ export function SpriteStudio() {
   const [authBusy, setAuthBusy] = useState(false);
   const [quota, setQuota] = useState<GenerationQuota | null>(null);
   const [runLog, setRunLog] = useState<StoredSpriteRun[]>([]);
-  const [runLogReady, setRunLogReady] = useState(false);
+  const [runLogAccountId, setRunLogAccountId] = useState<string | null>(null);
 
   const exportMetadata = useMemo(
     () => createMetadata(generation ?? { prompt, style, action, frames }),
@@ -174,24 +174,27 @@ export function SpriteStudio() {
 
   useEffect(() => {
     let active = true;
+    const accountId = user?.id;
     const loadRunHistory = window.setTimeout(() => {
-      setRunLogReady(false);
-
-      if (!user) {
+      if (!accountId) {
         setRunLog([]);
-        setRunLogReady(true);
+        setRunLogAccountId(null);
         return;
       }
 
-      void readStoredSpriteRuns(user.id)
+      // Do not save anything until this account's stored sheets have finished loading.
+      // Otherwise an empty initial state can overwrite the account's existing history.
+      setRunLogAccountId(null);
+      void readStoredSpriteRuns(accountId)
         .then((runs) => {
-          if (active) setRunLog(runs);
+          if (!active) return;
+          setRunLog(runs);
+          setRunLogAccountId(accountId);
         })
         .catch(() => {
-          if (active) setRunLog([]);
-        })
-        .finally(() => {
-          if (active) setRunLogReady(true);
+          if (!active) return;
+          setRunLog([]);
+          setRunLogAccountId(accountId);
         });
     }, 0);
 
@@ -199,14 +202,14 @@ export function SpriteStudio() {
       active = false;
       window.clearTimeout(loadRunHistory);
     };
-  }, [user]);
+  }, [user?.id]);
 
   useEffect(() => {
-    if (!runLogReady || !user) return;
+    if (!user || runLogAccountId !== user.id) return;
     void writeStoredSpriteRuns(user.id, runLog).catch(() => {
       // Browser storage is optional and should never block a generation or export.
     });
-  }, [runLog, runLogReady, user]);
+  }, [runLog, runLogAccountId, user]);
 
   async function authenticate(kind: "signIn" | "signUp") {
     setAuthMessage("");
