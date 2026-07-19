@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 const samples = [
   "A tiny brass automaton librarian with a glowing amber eye and an oversized key",
@@ -18,6 +18,18 @@ const showcaseSpriteUrl =
 type Generation = {
   image: string;
   createdAt: string;
+  quota: GenerationQuota;
+};
+
+type GenerationQuota = {
+  limit: number;
+  used: number;
+  remaining: number;
+};
+
+type SignedInUser = {
+  id: string;
+  email: string | null;
 };
 
 function SparkleIcon() {
@@ -64,6 +76,12 @@ export default function Home() {
   const [generation, setGeneration] = useState<Generation | null>(null);
   const [status, setStatus] = useState<"idle" | "working" | "error">("idle");
   const [error, setError] = useState("");
+  const [user, setUser] = useState<SignedInUser | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [email, setEmail] = useState("");
+  const [authMessage, setAuthMessage] = useState("");
+  const [sendingLink, setSendingLink] = useState(false);
+  const [quota, setQuota] = useState<GenerationQuota | null>(null);
 
   const metadata = useMemo(
     () => ({
@@ -86,8 +104,79 @@ export default function Home() {
     document.getElementById("studio")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  useEffect(() => {
+    let active = true;
+
+    async function loadSession() {
+      try {
+        const response = await fetch("/api/auth/session", { cache: "no-store" });
+        if (response.ok) {
+          const data = (await response.json()) as { user?: SignedInUser };
+          if (active && data.user?.id) setUser(data.user);
+        }
+      } finally {
+        if (active) setAuthReady(true);
+      }
+    }
+
+    if (new URLSearchParams(window.location.search).get("signed_in") === "1") {
+      setAuthMessage("You are signed in. Your seven daily generations are ready.");
+      window.history.replaceState({}, "", `${window.location.pathname}${window.location.hash}`);
+    }
+
+    void loadSession();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function requestMagicLink(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setAuthMessage("");
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+    if (!supabaseUrl || !publishableKey) {
+      setAuthMessage("Sign-in is not configured yet. Please try again once the project is connected.");
+      return;
+    }
+
+    setSendingLink(true);
+    try {
+      const endpoint = new URL("/auth/v1/otp", supabaseUrl);
+      endpoint.searchParams.set("redirect_to", `${window.location.origin}/auth/callback`);
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          apikey: publishableKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email: email.trim(), create_user: true }),
+      });
+      const data = (await response.json().catch(() => ({}))) as { msg?: string; message?: string };
+      if (!response.ok) throw new Error(data.msg || data.message || "We could not send that sign-in link.");
+
+      setAuthMessage("Check your email for a secure sign-in link. It may take a moment to arrive.");
+    } catch (requestError) {
+      setAuthMessage(requestError instanceof Error ? requestError.message : "We could not send that sign-in link.");
+    } finally {
+      setSendingLink(false);
+    }
+  }
+
+  async function signOut() {
+    await fetch("/api/auth/session", { method: "DELETE" });
+    setUser(null);
+    setQuota(null);
+    setAuthMessage("You are signed out.");
+  }
+
   async function generate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!user) {
+      setError("Sign in with your email first. Anonymous generation is disabled.");
+      return;
+    }
     setError("");
     setStatus("working");
     setGeneration(null);
@@ -100,7 +189,8 @@ export default function Home() {
       });
       const data = (await response.json()) as Generation & { error?: string };
       if (!response.ok || !data.image) throw new Error(data.error || "Generation did not complete.");
-      setGeneration({ image: data.image, createdAt: data.createdAt });
+      setGeneration({ image: data.image, createdAt: data.createdAt, quota: data.quota });
+      setQuota(data.quota);
       setStatus("idle");
     } catch (requestError) {
       setStatus("error");
@@ -167,9 +257,13 @@ export default function Home() {
           <a href="#showcase">Showcase</a>
           <a href="#studio">Studio</a>
         </div>
-        <button className="button button-small" onClick={jumpToStudio}>
-          Make a sprite <ArrowIcon />
-        </button>
+        {user ? (
+          <button className="button button-small" onClick={signOut} type="button">Sign out</button>
+        ) : (
+          <button className="button button-small" onClick={jumpToStudio} type="button">
+            Sign in <ArrowIcon />
+          </button>
+        )}
       </nav>
 
       <section className="hero shell" id="top">
@@ -230,7 +324,10 @@ export default function Home() {
       </section>
 
       <section className="studio shell" id="studio">
-        <div className="studio-intro"><div className="eyebrow"><span /> The sprite studio</div><h2>Let’s make<br /><em>something playable.</em></h2><p>Use the real generator below. Your image is created on demand, and stays in your browser until you export it.</p><div className="studio-note"><SparkleIcon /> Your prompt is sent securely from the server—your Cloudflare token never reaches the browser.</div></div>
+        <div className="studio-intro"><div className="eyebrow"><span /> The sprite studio</div><h2>Let’s make<br /><em>something playable.</em></h2><p>Use the real generator below. Your image is created on demand, and stays in your browser until you export it.</p><div className="studio-note"><SparkleIcon /> Your prompt is sent securely from the server—your Cloudflare token never reaches the browser.</div>
+          {user ? <div className="auth-state"><b>Signed in{user.email ? ` as ${user.email}` : ""}</b><span>{quota ? `${quota.remaining} of ${quota.limit} generations remain today.` : "Seven generations are available each UTC day."}</span></div> : <section className="auth-panel"><b>Sign in to create</b><p>Each verified account receives seven sprite generations per UTC day.</p><form onSubmit={requestMagicLink}><label htmlFor="email">Email address</label><input id="email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" required /><button className="button button-auth" type="submit" disabled={sendingLink || !authReady}>{sendingLink ? "Sending link…" : "Email me a sign-in link"}</button></form></section>}
+          {authMessage && <p className="auth-message" role="status">{authMessage}</p>}
+        </div>
         <form className="generator" onSubmit={generate}>
           <label className="field-label" htmlFor="character">Character brief</label>
           <textarea id="character" value={prompt} onChange={(event) => setPrompt(event.target.value)} maxLength={480} rows={4} placeholder="A quiet cloud mechanic with moon boots..." />
@@ -240,7 +337,7 @@ export default function Home() {
             <label><span>First animation</span><select value={action} onChange={(event) => setAction(event.target.value)}>{actionOptions.map((option) => <option key={option}>{option}</option>)}</select></label>
             <fieldset><legend>Frames</legend><div className="segment-control">{frameOptions.map((option) => <button type="button" className={frames === option ? "selected" : ""} key={option} onClick={() => setFrames(option)}>{option}</button>)}</div></fieldset>
           </div>
-          <button className="button button-generate" disabled={status === "working"} type="submit">{status === "working" ? <><span className="spinner" /> Rendering your sprites…</> : <><SparkleIcon /> Generate sprite sheet <ArrowIcon /></>}</button>
+          <button className="button button-generate" disabled={status === "working" || !user || !authReady} type="submit">{status === "working" ? <><span className="spinner" /> Rendering your sprites…</> : !authReady ? "Checking sign-in…" : !user ? "Sign in above to generate" : <><SparkleIcon /> Generate sprite sheet <ArrowIcon /></>}</button>
           {error && <p className="form-error" role="alert">{error}</p>}
           <p className="fine-print">By generating, you agree not to request content that violates our usage rules.</p>
         </form>

@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 
+import { getAuthenticatedUser } from "../../../lib/supabase/auth";
+import { authCookieName } from "../../../lib/supabase/config";
+import { DAILY_GENERATION_LIMIT, QuotaConfigurationError, reserveDailyGeneration } from "../../../lib/supabase/quota";
+
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
@@ -23,6 +27,18 @@ function cleanPrompt(value: unknown) {
 }
 
 export async function POST(request: Request) {
+  const cookie = request.headers.get("cookie") || "";
+  const accessToken = cookie
+    .split(";")
+    .map((entry) => entry.trim())
+    .find((entry) => entry.startsWith(`${authCookieName}=`))
+    ?.slice(authCookieName.length + 1);
+  const user = accessToken ? await getAuthenticatedUser(accessToken) : null;
+
+  if (!user || user.isAnonymous) {
+    return NextResponse.json({ error: "Sign in with an email address to generate sprites." }, { status: 401 });
+  }
+
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
   const token = process.env.CLOUDFLARE_API_TOKEN;
 
@@ -47,6 +63,28 @@ export async function POST(request: Request) {
 
   if (!prompt || !style || !action || !frames) {
     return NextResponse.json({ error: "Please provide a valid character prompt and generator settings." }, { status: 400 });
+  }
+
+  let quota;
+  try {
+    quota = await reserveDailyGeneration(user.id);
+  } catch (error) {
+    console.error("Supabase generation quota check failed", error);
+    const message =
+      error instanceof QuotaConfigurationError
+        ? "Sign-in and daily quota protection are not configured yet."
+        : "Daily quota protection is temporarily unavailable. Please try again shortly.";
+    return NextResponse.json({ error: message }, { status: 503 });
+  }
+
+  if (!quota.allowed) {
+    return NextResponse.json(
+      {
+        error: `You have reached your ${DAILY_GENERATION_LIMIT} generations for today. Come back tomorrow.`,
+        quota: { limit: DAILY_GENERATION_LIMIT, used: quota.used, remaining: quota.remaining },
+      },
+      { status: 429 },
+    );
   }
 
   const imagePrompt = [
@@ -99,6 +137,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       image: `data:image/jpeg;base64,${payload.result.image}`,
       createdAt: new Date().toISOString(),
+      quota: { limit: DAILY_GENERATION_LIMIT, used: quota.used, remaining: quota.remaining },
     });
   } catch (error) {
     console.error("Cloudflare image generation request failed", error);
