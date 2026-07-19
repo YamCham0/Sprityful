@@ -1,7 +1,9 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { SiteFooter } from "./site-footer";
 
 const samples = [
   "A tiny brass automaton librarian with a glowing amber eye and an oversized key",
@@ -114,6 +116,7 @@ export function SpriteStudio() {
 
   useEffect(() => {
     let active = true;
+    let signedInTimer: number | undefined;
 
     async function loadSession() {
       try {
@@ -128,13 +131,16 @@ export function SpriteStudio() {
     }
 
     if (new URLSearchParams(window.location.search).get("signed_in") === "1") {
-      setAuthMessage("You are signed in. Your three daily generations are ready.");
+      signedInTimer = window.setTimeout(() => {
+        if (active) setAuthMessage("You are signed in. Your three daily generations are ready.");
+      }, 0);
       window.history.replaceState({}, "", `${window.location.pathname}#generator`);
     }
 
     void loadSession();
     return () => {
       active = false;
+      if (signedInTimer !== undefined) window.clearTimeout(signedInTimer);
     };
   }, []);
 
@@ -302,8 +308,8 @@ export function SpriteStudio() {
       <div className="ambient ambient-two" />
 
       <nav className="nav shell" aria-label="Main navigation">
-        <a className="brand" href="/" aria-label="Sprityful home"><span className="brand-mark"><Image src="/blue-fire-sprite.png" alt="" width={30} height={30} /></span>Sprityful</a>
-        <div className="nav-links"><a href="/#how-it-works">How it works</a><a href="/#showcase">Showcase</a></div>
+        <Link className="brand" href="/" aria-label="Sprityful home"><span className="brand-mark"><Image src="/blue-fire-sprite.png" alt="" width={30} height={30} /></span>Sprityful</Link>
+        <div className="nav-links"><Link href="/#how-it-works">How it works</Link><Link href="/#showcase">Showcase</Link></div>
         {user ? <button className="button button-small" onClick={signOut} type="button">Sign out</button> : <button className="button button-small" onClick={() => jumpTo("sign-in")} type="button">Sign in <ArrowIcon /></button>}
       </nav>
 
@@ -312,7 +318,7 @@ export function SpriteStudio() {
           <div className="eyebrow"><span /> Your sprite studio</div>
           <h1 id="studio-title">Build a cast<br /><em>worth playing.</em></h1>
           <p>Sign in once, then turn your character briefs into game-ready sprite sheets. Every verified account receives three generations each day.</p>
-          <a className="text-link studio-backlink" href="/"><ArrowIcon /> Back to the overview</a>
+          <Link className="text-link studio-backlink" href="/"><ArrowIcon /> Back to the overview</Link>
         </div>
 
         <section className="studio-access" id="sign-in" aria-labelledby="access-title">
@@ -338,7 +344,7 @@ export function SpriteStudio() {
         {generation ? <div className="result-card"><div className="result-top"><div><span className="status-dot" /> Chroma key ready for export</div><span>{new Date(generation.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span></div><div className="result-image checker"><img src={generation.image} alt={`Generated ${action} sprite sheet for ${prompt}`} /></div><div className="result-bottom"><div><b>{frames} frames</b><span>{style} · {action}</span></div><div className="download-actions"><button type="button" onClick={downloadMetadata}>JSON</button><button type="button" onClick={downloadImage}><DownloadIcon /> PNG</button></div></div></div> : <div className="empty-result"><div className="empty-stars">✦ ✧ · ✦</div><h3>Your next character appears here.</h3><p>Fill in a brief above and the studio will return an original, exportable sprite sheet.</p></div>}
       </section>
 
-      <footer className="footer shell"><a className="brand" href="/"><span className="brand-mark"><Image src="/blue-fire-sprite.png" alt="" width={30} height={30} /></span>Sprityful</a><p>By YamCham0</p><a className="text-link" href="#sign-in">Back to sign in <ArrowIcon /></a></footer>
+      <SiteFooter actionHref="#sign-in" actionLabel="Back to sign in" />
     </main>
   );
 }

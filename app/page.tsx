@@ -1,4 +1,7 @@
 import Image from "next/image";
+import { AdSenseAd } from "../components/adsense-ad";
+import { GoogleAdSenseLoader } from "../components/google-adsense-loader";
+import { SiteFooter } from "../components/site-footer";
 
 const showcaseSpriteUrl = "/showcase/nova-runner-spritesheet.png";
 
@@ -21,6 +24,7 @@ function GridIcon() {
 export default function Home() {
   return (
     <main>
+      <GoogleAdSenseLoader />
       <div className="ambient ambient-one" />
       <div className="ambient ambient-two" />
 
@@ -39,7 +43,9 @@ export default function Home() {
 
       <section className="showcase shell" id="showcase"><div className="showcase-copy"><div className="eyebrow"><span /> Made for lively worlds</div><h2>One character.<br /><em>A whole new game.</em></h2><p>Preview an export-ready action sheet, then open the studio when you are ready to make your own.</p><a className="button button-dark" href="/studio">Start creating <ArrowIcon /></a></div><div className="showcase-window"><div className="window-bar"><span /><span /><span /><b>preview / nova-runner.png</b></div><div className="checker"><Image src={showcaseSpriteUrl} alt="Pixel art character action-sheet showcase" width={1792} height={896} loading="eager" /></div><div className="window-footer"><span>4 character poses</span><span>export-ready sheet</span></div></div></section>
 
-      <footer className="footer shell"><a className="brand" href="#top"><span className="brand-mark"><Image src="/blue-fire-sprite.png" alt="" width={30} height={30} /></span>Sprityful</a><p>By YamCham0</p><a className="text-link" href="/studio">Open studio <ArrowIcon /></a></footer>
+      <div className="ad-shell shell"><AdSenseAd /></div>
+
+      <SiteFooter />
     </main>
   );
 }

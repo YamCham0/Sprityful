@@ -89,6 +89,24 @@ SUPABASE_SECRET_KEY=your_supabase_secret_key
 2. Add every value from `.env.example` to **Production**, **Preview**, and **Development**.
 3. Deploy. Future pushes to `main` will automatically create a new production deployment.
 
+## Optional: fund Sprityful with Google AdSense
+
+The site is ready for a single, clearly labelled manual ad slot on the public landing page. The sprite studio, sign-in flow, generator, and export buttons stay ad-free.
+
+1. Apply at [Google AdSense](https://www.google.com/adsense/), add `sprityful.vercel.app` as the site, and add the publisher client ID below to Vercel. Deploy so Google can verify the site.
+2. In AdSense, create a **manual responsive display ad unit** for the landing page. Leave Auto ads off so ads never appear inside the studio.
+3. In **Privacy & messaging**, publish Google&apos;s European regulations consent message for `https://sprityful.vercel.app` and set its privacy-policy URL to `https://sprityful.vercel.app/privacy`.
+4. After approval, add the ad unit slot and change `NEXT_PUBLIC_ADSENSE_ENABLE_ADS` to `true`, then deploy again.
+
+```env
+NEXT_PUBLIC_ADSENSE_CLIENT=ca-pub-1234567890123456
+NEXT_PUBLIC_ADSENSE_LANDING_SLOT=1234567890
+NEXT_PUBLIC_ADSENSE_ENABLE_ADS=true
+ADSENSE_PUBLISHER_ID=pub-1234567890123456
+```
+
+`ads.txt` is served automatically at `https://sprityful.vercel.app/ads.txt` once the publisher ID is configured. The AdSense client ID and ad-unit slot are public identifiers; do not put any payment, API, or login secret in these variables.
+
 ## How it works
 
 - Sprityful uses Cloudflare Workers AI (`@cf/black-forest-labs/flux-1-schnell`) to create the sprite-sheet source.
