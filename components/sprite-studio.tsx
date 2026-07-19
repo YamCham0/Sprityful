@@ -21,10 +21,23 @@ type GenerationQuota = {
   remaining: number;
 };
 
-type Generation = {
+type SpriteDetails = {
+  prompt: string;
+  style: string;
+  action: string;
+  frames: number;
+};
+
+type Generation = SpriteDetails & {
   image: string;
   createdAt: string;
   quota: GenerationQuota;
+};
+
+type RunLog = SpriteDetails & {
+  id: string;
+  name: string;
+  createdAt: string;
 };
 
 type SignedInUser = {
@@ -40,6 +53,43 @@ type SupabaseAuthResponse = {
   message?: string;
   msg?: string;
 };
+
+const runHistoryKey = "sprityful:studio-run-history:v1";
+
+function createRunName(prompt: string) {
+  const normalizedPrompt = prompt.trim().replace(/\s+/g, " ");
+  if (!normalizedPrompt) return "Untitled character";
+  const words = normalizedPrompt.split(" ").slice(0, 6);
+  return `${words.join(" ")}${normalizedPrompt.split(" ").length > words.length ? "..." : ""}`;
+}
+
+function isRunLog(value: unknown): value is RunLog {
+  if (!value || typeof value !== "object") return false;
+  const run = value as Partial<RunLog>;
+  return typeof run.id === "string"
+    && typeof run.name === "string"
+    && typeof run.prompt === "string"
+    && typeof run.style === "string"
+    && typeof run.action === "string"
+    && typeof run.frames === "number"
+    && typeof run.createdAt === "string";
+}
+
+function createMetadata({ prompt, style, action, frames }: SpriteDetails) {
+  return {
+    name: "sprityful-sprite-sheet",
+    prompt,
+    style,
+    animation: action,
+    frameCount: frames,
+    layout: { columns: frames, rows: 1, cellWidth: 256, cellHeight: 256 },
+    fps: action === "Idle + run" ? 8 : 10,
+    transparentBackground: true,
+    sourceFormat: "jpeg",
+    exportFormat: "png",
+    backgroundRemoval: "Client-side chroma key (#00ff00)",
+  };
+}
 
 function SparkleIcon() {
   return (
@@ -92,23 +142,14 @@ export function SpriteStudio() {
   const [authMessage, setAuthMessage] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
   const [quota, setQuota] = useState<GenerationQuota | null>(null);
+  const [runLog, setRunLog] = useState<RunLog[]>([]);
+  const [runLogReady, setRunLogReady] = useState(false);
 
-  const metadata = useMemo(
-    () => ({
-      name: "sprityful-sprite-sheet",
-      prompt,
-      style,
-      animation: action,
-      frameCount: frames,
-      layout: { columns: frames, rows: 1, cellWidth: 256, cellHeight: 256 },
-      fps: action === "Idle + run" ? 8 : 10,
-      transparentBackground: true,
-      sourceFormat: "jpeg",
-      exportFormat: "png",
-      backgroundRemoval: "Client-side chroma key (#00ff00)",
-    }),
-    [action, frames, prompt, style],
+  const exportMetadata = useMemo(
+    () => createMetadata(generation ?? { prompt, style, action, frames }),
+    [action, frames, generation, prompt, style],
   );
+  const activeWorkflowStep = generation || status === "working" ? 3 : prompt.trim() ? 2 : 1;
 
   function jumpTo(id: string) {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -143,6 +184,34 @@ export function SpriteStudio() {
       if (signedInTimer !== undefined) window.clearTimeout(signedInTimer);
     };
   }, []);
+
+  useEffect(() => {
+    const loadRunHistory = window.setTimeout(() => {
+      try {
+        const savedRuns = window.localStorage.getItem(runHistoryKey);
+        if (savedRuns) {
+          const parsedRuns: unknown = JSON.parse(savedRuns);
+          if (Array.isArray(parsedRuns)) setRunLog(parsedRuns.filter(isRunLog).slice(0, 5));
+        }
+      } catch {
+        // Local run history is optional and should never block the studio.
+      } finally {
+        setRunLogReady(true);
+      }
+    }, 0);
+
+    return () => window.clearTimeout(loadRunHistory);
+  }, []);
+
+  useEffect(() => {
+    if (!runLogReady) return;
+    try {
+      if (runLog.length) window.localStorage.setItem(runHistoryKey, JSON.stringify(runLog));
+      else window.localStorage.removeItem(runHistoryKey);
+    } catch {
+      // A full or unavailable browser storage should not affect generation.
+    }
+  }, [runLog, runLogReady]);
 
   async function authenticate(kind: "signIn" | "signUp") {
     setAuthMessage("");
@@ -240,6 +309,7 @@ export function SpriteStudio() {
     setError("");
     setStatus("working");
     setGeneration(null);
+    const spriteDetails = { prompt, style, action, frames };
 
     try {
       const response = await fetch("/api/generate", {
@@ -249,7 +319,16 @@ export function SpriteStudio() {
       });
       const data = (await response.json()) as Generation & { error?: string };
       if (!response.ok || !data.image) throw new Error(data.error || "Generation did not complete.");
-      setGeneration({ image: data.image, createdAt: data.createdAt, quota: data.quota });
+      setGeneration({ ...spriteDetails, image: data.image, createdAt: data.createdAt, quota: data.quota });
+      setRunLog((currentRuns) => [
+        {
+          ...spriteDetails,
+          id: `${data.createdAt}-${Math.random().toString(36).slice(2, 8)}`,
+          name: createRunName(spriteDetails.prompt),
+          createdAt: data.createdAt,
+        },
+        ...currentRuns.filter((run) => run.prompt !== spriteDetails.prompt || run.action !== spriteDetails.action || run.style !== spriteDetails.style || run.frames !== spriteDetails.frames),
+      ].slice(0, 5));
       setQuota(data.quota);
       setStatus("idle");
     } catch (requestError) {
@@ -294,12 +373,26 @@ export function SpriteStudio() {
   }
 
   function downloadMetadata() {
-    const blob = new Blob([JSON.stringify(metadata, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify(exportMetadata, null, 2)], { type: "application/json" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
     link.download = "sprityful-spritesheet.json";
     link.click();
     URL.revokeObjectURL(link.href);
+  }
+
+  function loadRun(run: RunLog) {
+    setPrompt(run.prompt);
+    setStyle(run.style);
+    setAction(run.action);
+    setFrames(run.frames);
+    setGeneration(null);
+    setError("");
+    window.setTimeout(() => jumpTo("generator"), 0);
+  }
+
+  function clearRunHistory() {
+    setRunLog([]);
   }
 
   return (
@@ -313,35 +406,83 @@ export function SpriteStudio() {
         {user ? <button className="button button-small" onClick={signOut} type="button">Sign out</button> : <button className="button button-small" onClick={() => jumpTo("sign-in")} type="button">Sign in <ArrowIcon /></button>}
       </nav>
 
-      <section className="studio-page-hero shell" aria-labelledby="studio-title">
-        <div className="studio-hero-copy">
-          <div className="eyebrow"><span /> Your sprite studio</div>
-          <h1 id="studio-title">Build a cast<br /><em>worth playing.</em></h1>
-          <p>Sign in once, then turn your character briefs into game-ready sprite sheets. Every verified account receives three generations each day.</p>
+      <section className="studio-masthead shell" aria-labelledby="studio-title">
+        <div className="studio-masthead-copy">
+          <div className="eyebrow"><span /> Sprityful studio</div>
+          <h1 id="studio-title">From a character brief<br /><em>to playable motion.</em></h1>
+          <p>Build one focused run at a time: define the hero, choose its first motion, then export a sprite sheet ready for your game.</p>
           <Link className="text-link studio-backlink" href="/"><ArrowIcon /> Back to the overview</Link>
         </div>
 
-        <section className="studio-access" id="sign-in" aria-labelledby="access-title">
+        <section className="studio-access studio-auth-card" id="sign-in" aria-labelledby="access-title">
           {user ? <div className="auth-state"><b id="access-title">Signed in{user.email ? ` as ${user.email}` : ""}</b><span>{quota ? `${quota.remaining} of ${quota.limit} generations remain today.` : "Three generations are available each UTC day."}</span><button className="button button-auth-secondary auth-signout" type="button" onClick={signOut}>Sign out</button></div> : <div className="auth-panel"><b id="access-title">Sign in to create</b><p>Use email and password, or continue with Google. Your free daily generations unlock as soon as you are signed in.</p><form onSubmit={signInWithPassword}><label htmlFor="email">Email address</label><input id="email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" required /><label htmlFor="password">Password</label><input id="password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} placeholder="At least 8 characters" required /><div className="auth-actions"><button className="button button-auth" type="submit" disabled={authBusy || !authReady}>{authBusy ? "Please wait..." : "Sign in"}</button><button className="button button-auth-secondary" type="button" onClick={() => void authenticate("signUp")} disabled={authBusy || !authReady}>Create account</button></div></form><div className="auth-divider"><span />or<span /></div><button className="button button-google" type="button" onClick={signInWithGoogle} disabled={!authReady}><GoogleIcon /> Continue with Google</button></div>}
           {authMessage && <p className="auth-message" role="status">{authMessage}</p>}
         </section>
       </section>
 
-      <section className="workspace shell" id="generator" aria-labelledby="generator-title">
-        <div className="workspace-intro"><div className="eyebrow"><span /> Ready when you are</div><h2 id="generator-title">Describe the hero.<br /><em>We make the sheet.</em></h2><p>Your image is created on demand and stays in your browser until you export it.</p></div>
-        <form className="generator" onSubmit={generate}>
-          <label className="field-label" htmlFor="character">Character brief</label>
-          <textarea id="character" value={prompt} onChange={(event) => setPrompt(event.target.value)} maxLength={480} rows={4} placeholder="A quiet cloud mechanic with moon boots..." />
-          <div className="sample-row"><span>Try a spark:</span>{samples.map((sample) => <button type="button" className="sample" key={sample} onClick={() => setPrompt(sample)}>{sample.split(" ").slice(0, 4).join(" ")}...</button>)}</div>
-          <div className="controls-grid"><label><span>Art style</span><select value={style} onChange={(event) => setStyle(event.target.value)}>{styleOptions.map((option) => <option key={option}>{option}</option>)}</select></label><label><span>First animation</span><select value={action} onChange={(event) => setAction(event.target.value)}>{actionOptions.map((option) => <option key={option}>{option}</option>)}</select></label><fieldset><legend>Frames</legend><div className="segment-control">{frameOptions.map((option) => <button type="button" className={frames === option ? "selected" : ""} key={option} onClick={() => setFrames(option)}>{option}</button>)}</div></fieldset></div>
-          <button className="button button-generate" disabled={status === "working" || !user || !authReady} type="submit">{status === "working" ? <><span className="spinner" /> Rendering your sprites...</> : !authReady ? "Checking sign-in..." : !user ? "Sign in above to generate" : <><SparkleIcon /> Generate sprite sheet <ArrowIcon /></>}</button>
-          {error && <p className="form-error" role="alert">{error}</p>}
-          <p className="fine-print">By generating, you agree not to request content that violates our usage rules.</p>
+      <section className="studio-workflow shell" id="generator" aria-labelledby="generator-title">
+        <div className="workflow-heading">
+          <div>
+            <div className="eyebrow"><span /> A focused run</div>
+            <h2 id="generator-title">Three steps. <em>One exportable sheet.</em></h2>
+          </div>
+          <p>Keep the creative choices small and deliberate. The final image stays in this browser until you download it.</p>
+        </div>
+
+        <ol className="workflow-steps" aria-label="Sprite generation workflow">
+          {[
+            ["01", "Brief", "Describe the hero"],
+            ["02", "Motion", "Choose action and frames"],
+            ["03", "Export", "Generate, review, download"],
+          ].map(([number, label, detail], index) => {
+            const step = index + 1;
+            return <li className={step === activeWorkflowStep ? "current" : step < activeWorkflowStep ? "complete" : ""} key={number} aria-current={step === activeWorkflowStep ? "step" : undefined}><span>{number}</span><div><b>{label}</b><small>{detail}</small></div></li>;
+          })}
+        </ol>
+
+        <form className="generator studio-generator" onSubmit={generate}>
+          <section className="form-step" aria-labelledby="brief-step-title">
+            <div className="form-step-heading"><span>01</span><div><h3 id="brief-step-title">Character brief</h3><p>Give the generator the silhouette, personality, and standout details that make this run recognizable.</p></div></div>
+            <label className="field-label" htmlFor="character">Who are we bringing to life?</label>
+            <textarea id="character" value={prompt} onChange={(event) => setPrompt(event.target.value)} maxLength={480} rows={4} placeholder="A quiet cloud mechanic with moon boots..." />
+            <div className="sample-row"><span>Try a spark:</span>{samples.map((sample) => <button type="button" className="sample" key={sample} onClick={() => setPrompt(sample)}>{sample.split(" ").slice(0, 4).join(" ")}...</button>)}</div>
+          </section>
+
+          <section className="form-step" aria-labelledby="motion-step-title">
+            <div className="form-step-heading"><span>02</span><div><h3 id="motion-step-title">Motion setup</h3><p>Start with the one action that best introduces the character in-game.</p></div></div>
+            <div className="controls-grid"><label><span>Art style</span><select value={style} onChange={(event) => setStyle(event.target.value)}>{styleOptions.map((option) => <option key={option}>{option}</option>)}</select></label><label><span>First animation</span><select value={action} onChange={(event) => setAction(event.target.value)}>{actionOptions.map((option) => <option key={option}>{option}</option>)}</select></label><fieldset><legend>Frames</legend><div className="segment-control">{frameOptions.map((option) => <button type="button" className={frames === option ? "selected" : ""} key={option} onClick={() => setFrames(option)}>{option}</button>)}</div></fieldset></div>
+            <div className="run-summary"><span>This run will create</span><b>{frames}-frame {style} sheet</b><small>{action} is the first animation.</small></div>
+          </section>
+
+          <section className="form-step form-step-export" aria-labelledby="export-step-title">
+            <div className="form-step-heading"><span>03</span><div><h3 id="export-step-title">Generate and review</h3><p>Review the output, then download a PNG with green removed and matching sprite metadata.</p></div></div>
+            <button className="button button-generate" disabled={status === "working" || !user || !authReady} type="submit">{status === "working" ? <><span className="spinner" /> Rendering your sprites...</> : !authReady ? "Checking sign-in..." : !user ? "Sign in above to generate" : <><SparkleIcon /> Generate this run <ArrowIcon /></>}</button>
+            {error && <p className="form-error" role="alert">{error}</p>}
+            <p className="fine-print">By generating, you agree not to request content that violates our usage rules.</p>
+          </section>
         </form>
       </section>
 
-      <section className="result shell" aria-live="polite">
-        {generation ? <div className="result-card"><div className="result-top"><div><span className="status-dot" /> Chroma key ready for export</div><span>{new Date(generation.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span></div><div className="result-image checker"><img src={generation.image} alt={`Generated ${action} sprite sheet for ${prompt}`} /></div><div className="result-bottom"><div><b>{frames} frames</b><span>{style} · {action}</span></div><div className="download-actions"><button type="button" onClick={downloadMetadata}>JSON</button><button type="button" onClick={downloadImage}><DownloadIcon /> PNG</button></div></div></div> : <div className="empty-result"><div className="empty-stars">✦ ✧ · ✦</div><h3>Your next character appears here.</h3><p>Fill in a brief above and the studio will return an original, exportable sprite sheet.</p></div>}
+      <section className="run-review shell" id="run-review" aria-live="polite" aria-labelledby="review-title">
+        <div className="run-review-heading"><div><div className="eyebrow"><span /> Run review</div><h2 id="review-title">{generation ? <>Your sheet is <em>ready.</em></> : <>The review desk <em>is waiting.</em></>}</h2></div><p>{generation ? "Inspect the result, then take both files with you." : "Your generated sheet, PNG export, and matching JSON will appear here."}</p></div>
+        <div className="run-review-grid">
+          {generation ? (
+            <div className="result-card">
+              <div className="result-top"><div><span className="status-dot" /> Chroma key ready for export</div><span>{new Date(generation.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span></div>
+              <div className="result-image checker">
+                {/* The image is an in-memory generated data URL and must retain its natural pixels for the export canvas. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={generation.image} alt={`Generated ${generation.action} sprite sheet for ${generation.prompt}`} />
+              </div>
+              <div className="result-bottom"><div><b>{generation.frames} frames</b><span>{generation.style} &middot; {generation.action}</span></div><div className="download-actions"><button type="button" onClick={downloadMetadata}>JSON</button><button type="button" onClick={downloadImage}><DownloadIcon /> PNG</button></div></div>
+            </div>
+          ) : <div className="empty-result"><div className="empty-stars">✦ ✧ · ✦</div><h3>Your next character appears here.</h3><p>Finish the brief above and the studio will return an original, exportable sprite sheet.</p></div>}
+
+          <aside className="run-log" aria-label="Recent runs on this device">
+            <div className="run-log-heading"><div><b>Recent briefs</b><span>Only on this device</span></div>{runLog.length > 0 && <button type="button" onClick={clearRunHistory}>Clear</button>}</div>
+            {runLog.length > 0 ? <div className="run-log-list">{runLog.map((run) => <button className="run-log-item" type="button" onClick={() => loadRun(run)} key={run.id}><span>{run.name}</span><small>{run.frames} frames · {run.action}</small></button>)}</div> : <p>When you generate a sheet, its brief and settings will be kept here so you can make another variation. Images are not saved.</p>}
+          </aside>
+        </div>
       </section>
 
       <SiteFooter actionHref="#sign-in" actionLabel="Back to sign in" />
