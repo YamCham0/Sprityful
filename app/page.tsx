@@ -12,6 +12,8 @@ const samples = [
 const styleOptions = ["16-bit adventure", "Cozy fantasy", "Neon arcade", "Pocket horror"];
 const actionOptions = ["Idle + run", "Walk cycle", "Attack combo", "Spell cast"];
 const frameOptions = [4, 6, 8];
+const showcaseSpriteUrl =
+  "https://raw.githubusercontent.com/YamCham0/Sprityful/main/public/showcase/nova-runner-spritesheet.png";
 
 type Generation = {
   image: string;
@@ -194,7 +196,7 @@ export default function Home() {
           <div className="grid-noise" />
           <Image
             className="hero-sheet"
-            src="/showcase/nova-runner-spritesheet.png"
+            src={showcaseSpriteUrl}
             alt="Original space ranger pixel-art animation sprite sheet"
             width={1792}
             height={896}
@@ -224,7 +226,7 @@ export default function Home() {
 
       <section className="showcase shell" id="showcase">
         <div className="showcase-copy"><div className="eyebrow"><span /> Built for lively worlds</div><h2>It begins with a<br /><em>single character.</em></h2><p>Then you give them a walk, a spell, a hurt pose, an absurd victory dance. Start with the one your game has been missing.</p><button className="button button-dark" onClick={jumpToStudio}>Make one now <ArrowIcon /></button></div>
-        <div className="showcase-window"><div className="window-bar"><span /><span /><span /><b>preview / nova-runner.png</b></div><div className="checker"><Image src="/showcase/nova-runner-spritesheet.png" alt="Pixel art character action-sheet showcase" width={1792} height={896} loading="eager" /></div><div className="window-footer"><span>4 character poses</span><span>export-ready sheet</span></div></div>
+        <div className="showcase-window"><div className="window-bar"><span /><span /><span /><b>preview / nova-runner.png</b></div><div className="checker"><Image src={showcaseSpriteUrl} alt="Pixel art character action-sheet showcase" width={1792} height={896} loading="eager" /></div><div className="window-footer"><span>4 character poses</span><span>export-ready sheet</span></div></div>
       </section>
 
       <section className="studio shell" id="studio">
