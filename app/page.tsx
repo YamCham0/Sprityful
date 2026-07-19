@@ -32,6 +32,15 @@ type SignedInUser = {
   email: string | null;
 };
 
+type SupabaseAuthResponse = {
+  access_token?: string;
+  session?: { access_token?: string };
+  error?: string;
+  error_description?: string;
+  message?: string;
+  msg?: string;
+};
+
 function SparkleIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
@@ -68,6 +77,17 @@ function GridIcon() {
   );
 }
 
+function GoogleIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+      <path d="M21.35 12.24c0-.72-.06-1.22-.2-1.74H12v3.35h5.37a4.6 4.6 0 0 1-1.99 3.02v2.17h3.22c1.88-1.74 2.75-4.3 2.75-6.8Z" fill="currentColor" />
+      <path d="M12 21.7c2.62 0 4.82-.87 6.42-2.66l-3.22-2.17c-.87.58-1.98.92-3.2.92-2.53 0-4.68-1.7-5.45-4.01H3.23v2.23A9.7 9.7 0 0 0 12 21.7Z" fill="currentColor" />
+      <path d="M6.55 13.78a5.85 5.85 0 0 1 0-3.56V7.99H3.23a9.72 9.72 0 0 0 0 8.02l3.32-2.23Z" fill="currentColor" />
+      <path d="M12 6.21c1.46 0 2.77.5 3.8 1.48l2.85-2.8C16.8 3.17 14.61 2.3 12 2.3a9.7 9.7 0 0 0-8.77 5.69l3.32 2.23C7.32 7.91 9.47 6.21 12 6.21Z" fill="currentColor" />
+    </svg>
+  );
+}
+
 export default function Home() {
   const [prompt, setPrompt] = useState(samples[0]);
   const [style, setStyle] = useState(styleOptions[0]);
@@ -79,8 +99,9 @@ export default function Home() {
   const [user, setUser] = useState<SignedInUser | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [authMessage, setAuthMessage] = useState("");
-  const [sendingLink, setSendingLink] = useState(false);
+  const [authBusy, setAuthBusy] = useState(false);
   const [quota, setQuota] = useState<GenerationQuota | null>(null);
 
   const metadata = useMemo(
@@ -130,8 +151,7 @@ export default function Home() {
     };
   }, []);
 
-  async function requestMagicLink(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function authenticate(kind: "signIn" | "signUp") {
     setAuthMessage("");
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -141,27 +161,74 @@ export default function Home() {
       return;
     }
 
-    setSendingLink(true);
+    const normalizedEmail = email.trim();
+    if (!/^\S+@\S+\.\S+$/.test(normalizedEmail)) {
+      setAuthMessage("Enter a valid email address.");
+      return;
+    }
+    if (password.length < 8) {
+      setAuthMessage("Use a password with at least 8 characters.");
+      return;
+    }
+
+    setAuthBusy(true);
     try {
-      const endpoint = new URL("/auth/v1/otp", supabaseUrl);
-      endpoint.searchParams.set("redirect_to", `${window.location.origin}/auth/callback`);
+      const endpoint = new URL(kind === "signIn" ? "/auth/v1/token" : "/auth/v1/signup", supabaseUrl);
+      if (kind === "signIn") endpoint.searchParams.set("grant_type", "password");
+      else endpoint.searchParams.set("redirect_to", `${window.location.origin}/auth/callback`);
+
       const response = await fetch(endpoint, {
         method: "POST",
         headers: {
           apikey: publishableKey,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email: email.trim(), create_user: true }),
+        body: JSON.stringify({ email: normalizedEmail, password }),
       });
-      const data = (await response.json().catch(() => ({}))) as { msg?: string; message?: string };
-      if (!response.ok) throw new Error(data.msg || data.message || "We could not send that sign-in link.");
+      const data = (await response.json().catch(() => ({}))) as SupabaseAuthResponse;
+      if (!response.ok) throw new Error(data.error_description || data.msg || data.message || data.error || "We could not complete that request.");
 
-      setAuthMessage("Check your email for a secure sign-in link. It may take a moment to arrive.");
+      const accessToken = data.access_token || data.session?.access_token;
+      if (!accessToken) {
+        setAuthMessage("Account created. Check your email to confirm it, then sign in with your password.");
+        return;
+      }
+
+      const sessionResponse = await fetch("/api/auth/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accessToken }),
+      });
+      const sessionData = (await sessionResponse.json().catch(() => ({}))) as { user?: SignedInUser; error?: string };
+      if (!sessionResponse.ok || !sessionData.user?.id) throw new Error(sessionData.error || "We could not complete your sign-in.");
+
+      setUser(sessionData.user);
+      setPassword("");
+      setAuthMessage(kind === "signUp" ? "Account created. Your seven daily generations are ready." : "You are signed in. Your seven daily generations are ready.");
     } catch (requestError) {
-      setAuthMessage(requestError instanceof Error ? requestError.message : "We could not send that sign-in link.");
+      setAuthMessage(requestError instanceof Error ? requestError.message : "We could not complete your sign-in.");
     } finally {
-      setSendingLink(false);
+      setAuthBusy(false);
     }
+  }
+
+  function signInWithPassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void authenticate("signIn");
+  }
+
+  function signInWithGoogle() {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+    if (!supabaseUrl || !publishableKey) {
+      setAuthMessage("Sign-in is not configured yet. Please try again once the project is connected.");
+      return;
+    }
+
+    const endpoint = new URL("/auth/v1/authorize", supabaseUrl);
+    endpoint.searchParams.set("provider", "google");
+    endpoint.searchParams.set("redirect_to", `${window.location.origin}/auth/callback`);
+    window.location.assign(endpoint.toString());
   }
 
   async function signOut() {
@@ -174,7 +241,7 @@ export default function Home() {
   async function generate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!user) {
-      setError("Sign in with your email first. Anonymous generation is disabled.");
+      setError("Sign in with email and password or Google first. Anonymous generation is disabled.");
       return;
     }
     setError("");
@@ -325,7 +392,7 @@ export default function Home() {
 
       <section className="studio shell" id="studio">
         <div className="studio-intro"><div className="eyebrow"><span /> The sprite studio</div><h2>Let’s make<br /><em>something playable.</em></h2><p>Use the real generator below. Your image is created on demand, and stays in your browser until you export it.</p><div className="studio-note"><SparkleIcon /> Your prompt is sent securely from the server—your Cloudflare token never reaches the browser.</div>
-          {user ? <div className="auth-state"><b>Signed in{user.email ? ` as ${user.email}` : ""}</b><span>{quota ? `${quota.remaining} of ${quota.limit} generations remain today.` : "Seven generations are available each UTC day."}</span></div> : <section className="auth-panel"><b>Sign in to create</b><p>Each verified account receives seven sprite generations per UTC day.</p><form onSubmit={requestMagicLink}><label htmlFor="email">Email address</label><input id="email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" required /><button className="button button-auth" type="submit" disabled={sendingLink || !authReady}>{sendingLink ? "Sending link…" : "Email me a sign-in link"}</button></form></section>}
+          {user ? <div className="auth-state"><b>Signed in{user.email ? ` as ${user.email}` : ""}</b><span>{quota ? `${quota.remaining} of ${quota.limit} generations remain today.` : "Seven generations are available each UTC day."}</span></div> : <section className="auth-panel"><b>Sign in to create</b><p>Each verified account receives seven sprite generations per UTC day.</p><form onSubmit={signInWithPassword}><label htmlFor="email">Email address</label><input id="email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" required /><label htmlFor="password">Password</label><input id="password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} placeholder="At least 8 characters" required /><div className="auth-actions"><button className="button button-auth" type="submit" disabled={authBusy || !authReady}>{authBusy ? "Please wait…" : "Sign in"}</button><button className="button button-auth-secondary" type="button" onClick={() => void authenticate("signUp")} disabled={authBusy || !authReady}>Create account</button></div></form><div className="auth-divider"><span />or<span /></div><button className="button button-google" type="button" onClick={signInWithGoogle} disabled={!authReady}><GoogleIcon /> Continue with Google</button></section>}
           {authMessage && <p className="auth-message" role="status">{authMessage}</p>}
         </div>
         <form className="generator" onSubmit={generate}>

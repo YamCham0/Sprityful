@@ -20,7 +20,9 @@ Create the token in Cloudflare’s Workers AI dashboard. It needs the `Workers A
 1. Create or choose a Supabase project, then run [`supabase/migrations/20260719000000_add_generation_quota.sql`](supabase/migrations/20260719000000_add_generation_quota.sql) in its SQL Editor.
 2. In **Authentication → URL Configuration**, set the Site URL to `https://sprityful.vercel.app` and add `https://sprityful.vercel.app/auth/callback` to Redirect URLs. Add a localhost callback there too for local development.
 3. In **Project Connect / API Keys**, copy the Project URL and publishable key to `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Copy the server-only `sb_secret_` key to `SUPABASE_SECRET_KEY` (a legacy `SUPABASE_SERVICE_ROLE_KEY` also works).
-4. Add the same variables to Vercel for Production, Preview, and Development, then redeploy.
+4. Email/password authentication is enabled by default. Keep **Confirm Email** enabled in the Email provider so each account must verify its address before its first sign-in.
+5. To enable Google, create a Google OAuth web client, add `https://sprityful.vercel.app` as an authorized JavaScript origin, add the Supabase callback URL shown in **Authentication → Providers → Google** as an authorized redirect URI, then paste the Google Client ID and Client Secret into that Supabase provider.
+6. Add the same variables to Vercel for Production, Preview, and Development, then redeploy.
 
 The migration uses a transaction-safe upsert to reserve a generation before Workers AI is invoked. It cannot increment beyond seven per authenticated, non-anonymous user per UTC date—even with concurrent requests or direct API calls.
 
@@ -29,4 +31,4 @@ The migration uses a transaction-safe upsert to reserve a generation before Work
 - The landing-page showcase artwork is an original generated project asset at `public/showcase/nova-runner-spritesheet.png`.
 - The generator uses Cloudflare’s `@cf/black-forest-labs/flux-1-schnell` at four steps to fit inside the free Workers AI allocation for small projects.
 - Flux returns JPEG output, so Sprityful requests a solid green chroma-key backdrop and removes it in the browser only when exporting the final PNG. Avoid asking for green clothing or props.
-- Visitors can browse the site, but only email-authenticated Supabase users can reach the generation endpoint. Supabase anonymous sessions are explicitly rejected.
+- Visitors can browse the site, but only email/password or Google-authenticated Supabase users can reach the generation endpoint. Supabase anonymous sessions are explicitly rejected.

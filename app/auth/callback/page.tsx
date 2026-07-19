@@ -12,7 +12,7 @@ export default function AuthCallbackPage() {
       const authError = hash.get("error_description");
 
       if (authError || !accessToken) {
-        setMessage(authError || "That sign-in link is invalid or has expired. Please request another one.");
+        setMessage(authError || "That confirmation or Google sign-in link is invalid or has expired. Please try again.");
         return;
       }
 
