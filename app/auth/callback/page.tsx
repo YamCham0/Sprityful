@@ -26,7 +26,7 @@ export default function AuthCallbackPage() {
 
         if (!response.ok) throw new Error(data.error || "We could not complete your sign-in.");
 
-        window.location.replace("/?signed_in=1#studio");
+        window.location.replace("/studio?signed_in=1#generator");
       } catch (error) {
         setMessage(error instanceof Error ? error.message : "We could not complete your sign-in.");
       }
