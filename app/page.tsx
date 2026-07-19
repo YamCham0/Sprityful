@@ -25,7 +25,7 @@ export default function Home() {
       <div className="ambient ambient-two" />
 
       <nav className="nav shell" aria-label="Main navigation">
-        <a className="brand" href="#top" aria-label="Sprityful home"><span className="brand-mark"><SparkleIcon /></span>Sprityful</a>
+        <a className="brand" href="#top" aria-label="Sprityful home"><span className="brand-mark"><Image src="/blue-fire-sprite.png" alt="" width={30} height={30} /></span>Sprityful</a>
         <div className="nav-links"><a href="#how-it-works">How it works</a><a href="#showcase">Showcase</a></div>
         <a className="button button-small" href="/studio#sign-in">Sign in <ArrowIcon /></a>
       </nav>
@@ -39,7 +39,7 @@ export default function Home() {
 
       <section className="showcase shell" id="showcase"><div className="showcase-copy"><div className="eyebrow"><span /> Made for lively worlds</div><h2>One character.<br /><em>A whole new game.</em></h2><p>Preview an export-ready action sheet, then open the studio when you are ready to make your own.</p><a className="button button-dark" href="/studio">Start creating <ArrowIcon /></a></div><div className="showcase-window"><div className="window-bar"><span /><span /><span /><b>preview / nova-runner.png</b></div><div className="checker"><Image src={showcaseSpriteUrl} alt="Pixel art character action-sheet showcase" width={1792} height={896} loading="eager" /></div><div className="window-footer"><span>4 character poses</span><span>export-ready sheet</span></div></div></section>
 
-      <footer className="footer shell"><a className="brand" href="#top"><span className="brand-mark"><SparkleIcon /></span>Sprityful</a><p>By YamCham0</p><a className="text-link" href="/studio">Open studio <ArrowIcon /></a></footer>
+      <footer className="footer shell"><a className="brand" href="#top"><span className="brand-mark"><Image src="/blue-fire-sprite.png" alt="" width={30} height={30} /></span>Sprityful</a><p>By YamCham0</p><a className="text-link" href="/studio">Open studio <ArrowIcon /></a></footer>
     </main>
   );
 }
