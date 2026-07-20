@@ -23,7 +23,7 @@
 3. Generate an original sprite sheet.
 4. Download a transparent PNG and optional starter JSON metadata for your game.
 
-Every verified account receives **3 generations per UTC day**. This keeps the free generation pool available for everyone.
+Every verified account receives **1 generation per UTC day**. This keeps the free generation pool available for everyone.
 
 ## What the studio looks like
 
@@ -112,7 +112,7 @@ ADSENSE_PUBLISHER_ID=pub-1234567890123456
 - Sprityful uses Cloudflare Workers AI (`@cf/black-forest-labs/flux-1-schnell`) to create the sprite-sheet source.
 - The generator requests a green chroma-key background; Sprityful removes it in the browser when you download the final PNG.
 - Supabase handles email/password and Google sign-in.
-- A transaction-safe Supabase function reserves a generation before image creation, enforcing the three-per-day limit even when requests happen at the same time.
+- A transaction-safe Supabase function reserves a generation before image creation, enforcing the one-per-day limit even when requests happen at the same time.
 - Images are returned to the browser for export; Sprityful does not create a public gallery of user generations.
 
 ## Helpful notes

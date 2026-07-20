@@ -1,6 +1,6 @@
 import { getSupabasePublicConfig, getSupabaseSecretKeys } from "./config";
 
-export const DAILY_GENERATION_LIMIT = 3;
+export const DAILY_GENERATION_LIMIT = 1;
 
 const QUOTA_REQUEST_TIMEOUT_MS = 10_000;
 

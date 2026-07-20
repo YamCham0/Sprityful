@@ -19,7 +19,7 @@ export default function PrivacyPage() {
           <p>Sprityful is operated by YamCham0. This page explains what data is used when you visit the site, create an account, generate sprites, or see advertising.</p>
 
           <h2>What we use</h2>
-          <p>When you create an account, Supabase processes your email address, sign-in details, and account identifier. We use that identifier only to run the sign-in experience and enforce the three-generation daily limit.</p>
+          <p>When you create an account, Supabase processes your email address, sign-in details, and account identifier. We use that identifier only to run the sign-in experience and enforce the one-generation daily limit.</p>
           <p>When you generate a sprite, your character brief and selected settings are sent to Cloudflare Workers AI to create the image. The image is returned to your browser for export; Sprityful does not publish a gallery or keep generated images in its own storage.</p>
           <p>Vercel hosts the site and may process routine technical request information needed to deliver it securely and reliably.</p>
 
